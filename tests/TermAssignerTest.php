@@ -59,4 +59,16 @@ final class TermAssignerTest extends TestCase
     $this->assertSame([], WpStubs::$setCalls[0]['terms']);
     $this->assertFalse(WpStubs::$setCalls[0]['append']);
   }
+
+  public function testBulkReplaceSetsTermsOnEditableAttachments(): void
+  {
+    $assigner = new TermAssigner(Config::defaults());
+    $result = $assigner->bulkReplace([1, 2], [10, 11]);
+
+    $this->assertSame([1], $result['updated']);
+    $this->assertContains(2, $result['skipped']);
+    $this->assertCount(1, WpStubs::$setCalls);
+    $this->assertSame([10, 11], WpStubs::$setCalls[0]['terms']);
+    $this->assertFalse(WpStubs::$setCalls[0]['append']);
+  }
 }

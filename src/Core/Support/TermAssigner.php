@@ -104,6 +104,52 @@ final class TermAssigner
   }
 
   /**
+   * Replace all terms on each attachment (empty $termIds clears them).
+   *
+   * @param list<int> $attachmentIds
+   * @param list<int|string> $termIds
+   * @return array{updated: list<int>, skipped: list<int>, errors: list<array{id: int, message: string}>}
+   */
+  public function bulkReplace(array $attachmentIds, array $termIds): array
+  {
+    $updated = [];
+    $skipped = [];
+    $errors = [];
+    $termIds = $this->normalizeTermIds($termIds);
+
+    foreach ($attachmentIds as $attachmentId) {
+      $attachmentId = (int) $attachmentId;
+
+      if ($attachmentId <= 0 || get_post_type($attachmentId) !== 'attachment') {
+        $skipped[] = $attachmentId;
+        continue;
+      }
+
+      if (!current_user_can(Config::ASSIGN_CAP) || !current_user_can('edit_post', $attachmentId)) {
+        $skipped[] = $attachmentId;
+        continue;
+      }
+
+      $result = $this->set($attachmentId, $termIds);
+      if (is_wp_error($result)) {
+        $errors[] = [
+          'id' => $attachmentId,
+          'message' => $result->get_error_message(),
+        ];
+        continue;
+      }
+
+      $updated[] = $attachmentId;
+    }
+
+    return [
+      'updated' => $updated,
+      'skipped' => $skipped,
+      'errors' => $errors,
+    ];
+  }
+
+  /**
    * Ensure a default term exists and assign it to a newly uploaded attachment.
    */
   public function assignDefaultIfConfigured(int $attachmentId): void

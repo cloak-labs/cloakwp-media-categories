@@ -46,17 +46,33 @@ final class AttachmentDetails
     // Remove any default taxonomy field WP/plugin may have added for this slug.
     unset($fields[$this->config->slug]);
 
+    $termIds = wp_get_object_terms($post->ID, $this->config->slug, ['fields' => 'ids']);
+    if (is_wp_error($termIds)) {
+      $termIds = [];
+    }
+    $termIds = array_values(array_map('intval', $termIds));
+
     ob_start();
-    echo '<div class="media-categories-attachment-field" data-taxonomy="' . esc_attr($this->config->slug) . '">';
-    // Marker so empty checkbox sets still clear terms on save.
+    printf(
+      '<div class="media-categories-attachment-field" data-taxonomy="%s" data-attachment-id="%d">',
+      esc_attr($this->config->slug),
+      (int) $post->ID,
+    );
     echo '<input type="hidden" name="media_categories_fields[' . esc_attr($this->config->slug) . ']" value="1" />';
+    /*
+     * Do not output attachments[ID][{taxonomy}]. Core save-attachment-compat treats
+     * that key as slugs and will clobber REST/ID-based saves (or insert terms named "4").
+     */
+    echo '<div class="media-categories-checklist-wrap">';
     echo '<ul class="media-categories-checklist categorychecklist">';
     wp_terms_checklist($post->ID, [
       'taxonomy' => $this->config->slug,
       'checked_ontop' => false,
-      'walker' => null,
+      'selected_cats' => $termIds,
+      'walker' => class_exists(\Walker_Category_Checklist::class) ? new ChecklistWalker() : null,
     ]);
     echo '</ul>';
+    echo '</div>';
 
     if (current_user_can(Config::MANAGE_CAP)) {
       $this->renderAddNewForm($taxonomy);
@@ -69,7 +85,8 @@ final class AttachmentDetails
       'label' => $taxonomy->labels->name ?? $this->config->pluralLabel,
       'input' => 'html',
       'html' => $html,
-      'show_in_edit' => true,
+      // Dedicated post.php edit screen already has the core taxonomy metabox.
+      'show_in_edit' => false,
       'show_in_modal' => true,
     ];
 
@@ -92,21 +109,12 @@ final class AttachmentDetails
       return $attachment;
     }
 
-    $fieldWasPresent = isset($request['media_categories_fields'][$this->config->slug])
-      || isset($request['tax_input'][$this->config->slug])
-      || isset($request[$this->config->slug]);
-
-    if (!$fieldWasPresent) {
+    $slug = $this->config->slug;
+    if (!isset($request['tax_input'][$slug]) || !is_array($request['tax_input'][$slug])) {
       return $attachment;
     }
 
-    $terms = [];
-    if (isset($request['tax_input'][$this->config->slug]) && is_array($request['tax_input'][$this->config->slug])) {
-      $terms = array_map('intval', $request['tax_input'][$this->config->slug]);
-    } elseif (isset($request[$this->config->slug]) && is_array($request[$this->config->slug])) {
-      $terms = array_map('intval', $request[$this->config->slug]);
-    }
-
+    $terms = array_values(array_filter(array_map('intval', $request['tax_input'][$slug])));
     $this->termAssigner->set($id, $terms);
 
     return $attachment;
@@ -115,19 +123,27 @@ final class AttachmentDetails
   private function renderAddNewForm(object $taxonomy): void
   {
     $singular = $taxonomy->labels->singular_name ?? $this->config->singularLabel;
+    $addLabel = $taxonomy->labels->add_new_item ?? sprintf('Add New %s', $singular);
+    $cancelLabel = __('Cancel', 'media-categories');
     ?>
     <div class="media-categories-add-new">
-      <button type="button" class="button-link media-categories-add-toggle" aria-expanded="false">
-        <?php echo esc_html($taxonomy->labels->add_new_item ?? sprintf('Add New %s', $singular)); ?>
+      <button
+        type="button"
+        class="button-link media-categories-add-toggle"
+        aria-expanded="false"
+        data-label-add="<?php echo esc_attr($addLabel); ?>"
+        data-label-cancel="<?php echo esc_attr($cancelLabel); ?>"
+      >
+        <?php echo esc_html($addLabel); ?>
       </button>
       <div class="media-categories-add-form hidden">
-        <label>
-          <span class="screen-reader-text"><?php echo esc_html($taxonomy->labels->new_item_name ?? sprintf('New %s Name', $singular)); ?></span>
-          <input type="text" class="media-categories-new-name" placeholder="<?php echo esc_attr($singular); ?>" />
+        <label class="media-categories-add-label">
+          <span><?php echo esc_html__('Name', 'media-categories'); ?></span>
+          <input type="text" class="media-categories-new-name" />
         </label>
         <?php if ($this->config->hierarchical) : ?>
-          <label>
-            <span class="screen-reader-text"><?php echo esc_html($taxonomy->labels->parent_item ?? sprintf('Parent %s', $singular)); ?></span>
+          <label class="media-categories-add-label">
+            <span><?php echo esc_html__('Parent', 'media-categories'); ?></span>
             <?php
             wp_dropdown_categories([
               'taxonomy' => $this->config->slug,

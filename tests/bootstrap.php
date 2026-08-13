@@ -75,11 +75,69 @@ if (!function_exists('wp_set_object_terms')) {
   {
     \CloakWP\MediaCategories\Tests\WpStubs::$setCalls[] = [
       'id' => (int) $object_id,
-      'terms' => array_map('intval', (array) $terms),
+      'terms' => array_values((array) $terms),
       'taxonomy' => (string) $taxonomy,
       'append' => (bool) $append,
     ];
     return ['term_ids' => (array) $terms];
+  }
+}
+
+if (!function_exists('get_taxonomy')) {
+  function get_taxonomy($slug)
+  {
+    return \CloakWP\MediaCategories\Tests\WpStubs::$taxonomies[(string) $slug] ?? false;
+  }
+}
+
+if (!function_exists('wp_get_object_terms')) {
+  function wp_get_object_terms($object_id, $taxonomy, $args = [])
+  {
+    $terms = \CloakWP\MediaCategories\Tests\WpStubs::$objectTerms[(int) $object_id] ?? [];
+    if (($args['fields'] ?? '') === 'ids') {
+      return array_map(static fn($term) => (int) $term->term_id, $terms);
+    }
+    return $terms;
+  }
+}
+
+if (!function_exists('wp_terms_checklist')) {
+  function wp_terms_checklist($object_id, $args = []): void
+  {
+    echo \CloakWP\MediaCategories\Tests\WpStubs::$checklistHtml;
+  }
+}
+
+if (!function_exists('esc_attr')) {
+  function esc_attr($text): string
+  {
+    return htmlspecialchars((string) $text, ENT_QUOTES);
+  }
+}
+
+if (!function_exists('esc_html')) {
+  function esc_html($text): string
+  {
+    return htmlspecialchars((string) $text, ENT_QUOTES);
+  }
+}
+
+if (!function_exists('esc_html__')) {
+  function esc_html__(string $text, string $domain = 'default'): string
+  {
+    return $text;
+  }
+}
+
+if (!class_exists('WP_Post')) {
+  class WP_Post
+  {
+    public int $ID = 0;
+
+    public function __construct(int $id = 0)
+    {
+      $this->ID = $id;
+    }
   }
 }
 

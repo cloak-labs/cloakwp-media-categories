@@ -21,11 +21,30 @@ final class WpStubs
   /** @var list<array{id: int, terms: list<int>, taxonomy: string}> */
   public static array $removeCalls = [];
 
+  /** @var array<string, object|false> */
+  public static array $taxonomies = [];
+
+  /** @var array<int, list<object>> */
+  public static array $objectTerms = [];
+
+  public static string $checklistHtml = '';
+
+  /** @var list<string> Term names/slugs core would insert from string (non-int) values. */
+  public static array $insertedTermNames = [];
+
+  /** @var array<string, true> Existing term slugs, for core-style wp_set_object_terms simulation. */
+  public static array $existingSlugs = [];
+
   public static function reset(): void
   {
     self::$postTypes = [];
     self::$caps = [];
     self::$setCalls = [];
     self::$removeCalls = [];
+    self::$taxonomies = [];
+    self::$objectTerms = [];
+    self::$checklistHtml = '';
+    self::$insertedTermNames = [];
+    self::$existingSlugs = [];
   }
 }

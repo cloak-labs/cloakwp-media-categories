@@ -44,8 +44,14 @@ final class BulkAssignController
           'items' => ['type' => 'integer'],
         ],
         'append' => [
-          'required' => true,
+          'required' => false,
           'type' => 'boolean',
+          'default' => false,
+        ],
+        'replace' => [
+          'required' => false,
+          'type' => 'boolean',
+          'default' => false,
         ],
       ],
     ]);
@@ -61,8 +67,9 @@ final class BulkAssignController
     $attachmentIds = array_map('intval', (array) $request->get_param('attachment_ids'));
     $termIds = array_map('intval', (array) $request->get_param('term_ids'));
     $append = (bool) $request->get_param('append');
+    $replace = (bool) $request->get_param('replace');
 
-    if ($append && $termIds === []) {
+    if ($append && !$replace && $termIds === []) {
       return new WP_Error(
         'media_categories_empty_terms',
         'Select at least one category to add.',
@@ -82,7 +89,9 @@ final class BulkAssignController
       }
     }
 
-    $result = $this->termAssigner->bulkAssign($attachmentIds, $termIds, $append);
+    $result = $replace
+      ? $this->termAssigner->bulkReplace($attachmentIds, $termIds)
+      : $this->termAssigner->bulkAssign($attachmentIds, $termIds, $append);
 
     return new WP_REST_Response($result, 200);
   }
