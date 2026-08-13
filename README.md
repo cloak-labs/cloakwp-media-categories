@@ -105,7 +105,11 @@ Uses core taxonomy tables only (`wp_terms`, `wp_term_taxonomy`, `wp_term_relatio
 
 Default taxonomy slug: `category_media`.
 
-**Compatibility note:** If you currently use [WP Media Category Management](https://wordpress.org/plugins/wp-media-category-management/), this plugin is compatible with its data. Deactivate that plugin and activate this one — previously created categories and their assignments on media stay intact, as long as the taxonomy slug stays the same (it is `category_media` by default on both).
+**Compatibility note:** If you currently use [WP Media Category Management](https://wordpress.org/plugins/wp-media-category-management/), deactivate that plugin and activate this one. Assignments live in core term tables:
+
+- Same taxonomy slug (`category_media` by default on both) — terms and assignments stay as-is.
+- MCM was set to a different taxonomy (`category`, a custom slug, etc.) — a one-time per-site import copies attachment assignments onto this plugin’s taxonomy (append-only; existing terms are not replaced).
+- Term counts are recalculated with `_update_generic_term_count` so unattached media is included in library filter counts (WordPress’s default post-count callback skips those).
 
 ## Architecture (Core + Plugin)
 

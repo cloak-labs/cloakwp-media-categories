@@ -34,6 +34,7 @@ final class Plugin
     (new Grid($this->config, $this->attachmentQuery))->register();
     (new AttachmentDetails($this->config, $this->termAssigner, $assets))->register();
     (new BulkAssignController($this->config, $this->termAssigner))->register();
+    (new Maintenance($this->config))->register();
 
     if ($this->config->defaultTerm !== null) {
       add_action('add_attachment', [$this->termAssigner, 'assignDefaultIfConfigured']);
