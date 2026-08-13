@@ -71,7 +71,8 @@
         }).render()
       );
 
-      if (settings.assignCap && this.controller.isModeActive && this.controller.isModeActive('grid')) {
+      // Bulk-select assign (hidden until select:activate — only exists on the grid library).
+      if (settings.assignCap) {
         this.toolbar.set(
           'AssignCategoriesButton',
           new AssignCategoriesButton({

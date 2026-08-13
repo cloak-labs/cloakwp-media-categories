@@ -96,26 +96,28 @@ final class Assets
     }
 
     $taxonomy = get_taxonomy($this->config->slug);
-    $terms = get_terms([
-      'taxonomy' => $this->config->slug,
-      'hide_empty' => false,
-    ]);
+    $taxLabels = ($taxonomy && isset($taxonomy->labels)) ? $taxonomy->labels : null;
+    $singular = $taxLabels?->singular_name ?? $this->config->singularLabel;
+    $plural = $taxLabels?->name ?? $this->config->pluralLabel;
 
     $termList = [];
-    if (!is_wp_error($terms)) {
-      foreach ($terms as $term) {
-        $termList[] = [
-          'id' => (int) $term->term_id,
-          'name' => $term->name,
-          'slug' => $term->slug,
-          'parent' => (int) $term->parent,
-          'count' => (int) $term->count,
-        ];
+    if ($taxonomy) {
+      $terms = get_terms([
+        'taxonomy' => $this->config->slug,
+        'hide_empty' => false,
+      ]);
+      if (!is_wp_error($terms)) {
+        foreach ($terms as $term) {
+          $termList[] = [
+            'id' => (int) $term->term_id,
+            'name' => $term->name,
+            'slug' => $term->slug,
+            'parent' => (int) $term->parent,
+            'count' => (int) $term->count,
+          ];
+        }
       }
     }
-
-    $singular = $taxonomy->labels->singular_name ?? $this->config->singularLabel;
-    $plural = $taxonomy->labels->name ?? $this->config->pluralLabel;
 
     wp_localize_script(self::SCRIPT_HANDLE, 'mediaCategoriesAdmin', [
       'taxonomy' => $this->config->slug,
@@ -127,15 +129,15 @@ final class Assets
       'labels' => [
         'singular' => $singular,
         'plural' => $plural,
-        'all' => $taxonomy->labels->all_items ?? sprintf('All %s', $plural),
-        'filterBy' => $taxonomy->labels->filter_by_item ?? sprintf('Filter by %s', $singular),
+        'all' => $taxLabels?->all_items ?? sprintf('All %s', $plural),
+        'filterBy' => $taxLabels?->filter_by_item ?? sprintf('Filter by %s', $singular),
         'uncategorized' => 'Uncategorized',
         'bulkEdit' => sprintf('Edit %s', strtolower($plural)),
         'addToSelected' => 'Add to selected',
         'removeFromSelected' => 'Remove from selected',
-        'addNew' => $taxonomy->labels->add_new_item ?? sprintf('Add New %s', $singular),
-        'newName' => $taxonomy->labels->new_item_name ?? sprintf('New %s Name', $singular),
-        'parent' => $taxonomy->labels->parent_item ?? sprintf('Parent %s', $singular),
+        'addNew' => $taxLabels?->add_new_item ?? sprintf('Add New %s', $singular),
+        'newName' => $taxLabels?->new_item_name ?? sprintf('New %s Name', $singular),
+        'parent' => $taxLabels?->parent_item ?? sprintf('Parent %s', $singular),
         'none' => '— None —',
         'cancel' => 'Cancel',
         'apply' => 'Apply',
