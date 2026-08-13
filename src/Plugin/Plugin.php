@@ -31,7 +31,7 @@ final class Plugin
     $assets->register();
 
     (new ListTable($this->config, $this->attachmentQuery))->register();
-    (new Grid($this->config, $this->attachmentQuery, $assets))->register();
+    (new Grid($this->config, $this->attachmentQuery))->register();
     (new AttachmentDetails($this->config, $this->termAssigner, $assets))->register();
     (new BulkAssignController($this->config, $this->termAssigner))->register();
 
