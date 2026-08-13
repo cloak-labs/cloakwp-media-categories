@@ -14,8 +14,7 @@ final class MediaCategoriesFacadeTest extends TestCase
   {
     $ref = new ReflectionClass(MediaCategories::class);
     $prop = $ref->getProperty('instance');
-    $prop->setAccessible(true);
-    $prop->setValue(null, null);
+    $prop->setValue(null);
   }
 
   public function testFluentConfigBuildsExpectedValues(): void
