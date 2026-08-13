@@ -1,0 +1,111 @@
+/* Media Categories — minimal admin styles (core-like) */
+
+.media-categories-attachment-field .media-categories-checklist {
+  max-height: 12em;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #c3c4c7;
+  background: #fff;
+  padding: 6px 8px;
+}
+
+.media-categories-attachment-field .media-categories-checklist ul {
+  margin-left: 1em;
+  list-style: none;
+}
+
+.media-categories-attachment-field .media-categories-checklist li {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.media-categories-add-new {
+  margin-top: 8px;
+}
+
+.media-categories-add-toggle {
+  padding: 0;
+}
+
+.media-categories-add-form {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.media-categories-add-form.hidden {
+  display: none;
+}
+
+.media-categories-add-form input[type="text"],
+.media-categories-add-form select {
+  width: 100%;
+  max-width: 100%;
+}
+
+.media-categories-filter {
+  max-width: 16em;
+}
+
+.assign-categories-button.hidden {
+  display: none !important;
+}
+
+.media-categories-bulk-panel {
+  position: absolute;
+  z-index: 160000;
+  width: 280px;
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+}
+
+.media-categories-bulk-panel.hidden {
+  display: none;
+}
+
+.media-categories-bulk-panel__inner {
+  padding: 12px 14px;
+}
+
+.media-categories-bulk-panel__title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.media-categories-bulk-terms {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid #dcdcde;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  background: #f6f7f7;
+}
+
+.media-categories-bulk-term {
+  display: block;
+  margin: 2px 0;
+}
+
+.media-categories-bulk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.media-categories-bulk-status {
+  margin: 8px 0 0;
+  min-height: 1.2em;
+  color: #50575e;
+}
+
+/* Select-mode toolbar: keep our button beside Delete */
+.media-toolbar-mode-select .assign-categories-button {
+  display: inline-block !important;
+  margin-left: 8px;
+}
