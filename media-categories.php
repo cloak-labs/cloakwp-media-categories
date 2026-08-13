@@ -21,9 +21,28 @@ if (!defined('ABSPATH')) {
   exit;
 }
 
-define('CLOAKWP_MEDIA_CATEGORIES_FILE', __FILE__);
-define('CLOAKWP_MEDIA_CATEGORIES_DIR', __DIR__);
+/*
+ * Composer path repos symlink this package outside wp-content. PHP resolves
+ * __FILE__/__DIR__ to the real path, which breaks plugins_url()/plugin_basename().
+ * Prefer the public mu-plugins path WordPress (and the web server) actually serve.
+ */
+$cloakwpMediaCategoriesFile = __FILE__;
+$cloakwpMediaCategoriesDir = __DIR__;
+if (defined('WPMU_PLUGIN_DIR')) {
+  $cloakwpMuPluginFile = WPMU_PLUGIN_DIR . '/media-categories/media-categories.php';
+  if (is_readable($cloakwpMuPluginFile)) {
+    $cloakwpMediaCategoriesFile = $cloakwpMuPluginFile;
+    $cloakwpMediaCategoriesDir = dirname($cloakwpMuPluginFile);
+  }
+}
+
+define('CLOAKWP_MEDIA_CATEGORIES_FILE', $cloakwpMediaCategoriesFile);
+define('CLOAKWP_MEDIA_CATEGORIES_DIR', $cloakwpMediaCategoriesDir);
 define('CLOAKWP_MEDIA_CATEGORIES_VERSION', '0.1.0');
+
+if (function_exists('wp_register_plugin_realpath')) {
+  wp_register_plugin_realpath(CLOAKWP_MEDIA_CATEGORIES_FILE);
+}
 
 if (is_readable(__DIR__ . '/vendor/autoload.php')) {
   require_once __DIR__ . '/vendor/autoload.php';
