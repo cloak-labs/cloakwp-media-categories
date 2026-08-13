@@ -6,19 +6,31 @@ Organize attachments with a hierarchical **Media Categories** taxonomy (`categor
 
 ## Install paths
 
-### 1. Composer (Bedrock / CloakWP) — recommended
+### 1. Composer (must-use plugin) — recommended
 
 ```bash
 composer require cloakwp/media-categories
 ```
 
-Package type is `wordpress-muplugin`. Composer Installers places it at:
+Package type is `wordpress-muplugin`. With [`composer/installers`](https://github.com/composer/installers) configured, that installs to:
 
 ```
-wp-content/mu-plugins/media-categories/   # or public/app/mu-plugins/ on Bedrock
+wp-content/mu-plugins/media-categories/
 ```
 
-**Bedrock Autoloader** loads subdirectory must-use plugins automatically. The package appears under **Plugins → Must-Use**, not the regular (toggleable) Plugins list.
+(Your project may map that path differently — e.g. Bedrock uses `public/app/mu-plugins/`.)
+
+**Important:** WordPress core only auto-loads PHP files directly in `mu-plugins/`. It does **not** load plugins nested in subdirectories like `mu-plugins/media-categories/media-categories.php`. You need an autoloader (or a tiny stub) for subdirectory must-use plugins.
+
+**Recommended:** [Roots Bedrock Autoloader](https://github.com/roots/bedrock-autoloader) — it scans `mu-plugins/*/*.php` for plugin headers and includes them. Ships with [Bedrock](https://roots.io/bedrock/); usable in any WordPress project as `roots/bedrock-autoloader`. Once loaded, this package shows under **Plugins → Must-Use** (not the toggleable Plugins list).
+
+**Without an autoloader**, add a one-line stub at the mu-plugins root:
+
+```php
+<?php
+// wp-content/mu-plugins/media-categories-loader.php
+require WPMU_PLUGIN_DIR . '/media-categories/media-categories.php';
+```
 
 Optional fluent config in your theme `functions.php` (runs before the deferred default boot):
 
@@ -33,19 +45,19 @@ MediaCategories::make()
 
 If you never call `register()`, the plugin bootstrap starts with defaults on `init` priority 1.
 
-### 2. Traditional plugin zip
+### 2. Traditional plugin install (download as a zip)
 
-Drop the package folder into `wp-content/plugins/media-categories/` and activate it like any plugin. Same defaults; override via fluent `register()` or the config filter (below).
+For sites that don’t use Composer — install it like any other WordPress plugin:
 
-### 3. Composer without Bedrock Autoloader
+1. Open the [GitHub repository page](https://github.com/cloak-labs/cloakwp-media-categories).
+2. Click the green **Code** button, then **Download ZIP**.
+3. Unzip the file. You’ll get a folder named something like `cloakwp-media-categories-main`.
+4. Rename that folder to `media-categories` (optional but keeps the Plugins list tidy).
+5. Install it in either way:
+   - **WordPress admin:** Plugins → Add New → Upload Plugin → choose the zip (re-zip the renamed folder if you renamed it) → Install Now → Activate, **or**
+   - **Manually:** upload the `media-categories` folder into `wp-content/plugins/` on your server (via FTP/SFTP or your host’s file manager), then go to Plugins and click **Activate**.
 
-Installer still puts files in `mu-plugins/media-categories/`, but WordPress core does not load subdirectory mu-plugins. Add a one-line loader:
-
-```php
-<?php
-// wp-content/mu-plugins/media-categories-loader.php
-require WPMU_PLUGIN_DIR . '/media-categories/media-categories.php';
-```
+Same defaults as the Composer path. Developers can still override config via fluent `register()` or the config filter (below). No mu-plugin autoloader needed.
 
 ## Fluent API
 
