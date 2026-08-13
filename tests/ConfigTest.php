@@ -60,7 +60,7 @@ final class ConfigTest extends TestCase
 
     $this->assertSame('Media Categories', $labels['name']);
     $this->assertSame('Media Category', $labels['singular_name']);
-    $this->assertSame('All Media Categories', $labels['all_items']);
+    $this->assertSame('All media categories', $labels['all_items']);
     $this->assertSame('Filter by Media Category', $labels['filter_by_item']);
     $this->assertSame('Add New Media Category', $labels['add_new_item']);
     $this->assertStringNotContainsString('MCM', $labels['name']);

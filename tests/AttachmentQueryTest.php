@@ -33,6 +33,7 @@ final class AttachmentQueryTest extends TestCase
         'taxonomy' => 'category_media',
         'field' => 'term_id',
         'terms' => [12],
+        'include_children' => true,
       ],
     ], $args['tax_query']);
   }

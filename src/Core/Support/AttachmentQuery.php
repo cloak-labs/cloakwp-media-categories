@@ -43,6 +43,7 @@ final class AttachmentQuery
       'taxonomy' => $this->config->slug,
       'field' => 'term_id',
       'terms' => [(int) $value],
+      'include_children' => true,
     ]);
 
     return $args;

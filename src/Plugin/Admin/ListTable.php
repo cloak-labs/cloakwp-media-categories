@@ -13,6 +13,9 @@ use WP_Query;
  */
 final class ListTable
 {
+  /** Admin list filter query arg — must NOT match the taxonomy query_var. */
+  public const FILTER_ARG = 'media_category';
+
   public function __construct(
     private readonly Config $config,
     private readonly AttachmentQuery $attachmentQuery,
@@ -24,7 +27,11 @@ final class ListTable
     add_action('restrict_manage_posts', [$this, 'renderFilter'], 10, 2);
     add_action('pre_get_posts', [$this, 'filterQuery']);
     add_filter('bulk_actions-upload', [$this, 'registerBulkAction']);
-    add_filter('handle_bulk_actions-upload', [$this, 'handleBulkAction'], 10, 3);
+    // upload.php applies this in the switch default, then redirects.
+    add_filter('handle_bulk_actions-upload', [$this, 'handleBulkActionsFilter'], 10, 3);
+    // Belt-and-suspenders: also catch on load (before upload.php's own handler).
+    add_action('load-upload.php', [$this, 'handleBulkActionOnLoad']);
+    add_action('admin_footer-upload.php', [$this, 'renderBulkPanelBoot']);
     add_action('admin_notices', [$this, 'bulkAdminNotice']);
   }
 
@@ -39,8 +46,8 @@ final class ListTable
       return;
     }
 
-    $selected = isset($_GET[$this->config->slug])
-      ? sanitize_text_field(wp_unslash((string) $_GET[$this->config->slug]))
+    $selected = isset($_GET[self::FILTER_ARG])
+      ? sanitize_text_field(wp_unslash((string) $_GET[self::FILTER_ARG]))
       : '';
 
     $label = $taxonomy->labels->filter_by_item ?? sprintf('Filter by %s', $this->config->singularLabel);
@@ -49,9 +56,9 @@ final class ListTable
 
     $dropdown = wp_dropdown_categories([
       'taxonomy' => $this->config->slug,
-      'name' => $this->config->slug,
+      'name' => self::FILTER_ARG,
       'id' => 'media-categories-filter',
-      'show_option_all' => $taxonomy->labels->all_items ?? sprintf('All %s', $this->config->pluralLabel),
+      'show_option_all' => $taxonomy->labels->all_items ?? sprintf('All %s', strtolower($this->config->pluralLabel)),
       'hide_empty' => false,
       'hierarchical' => $this->config->hierarchical,
       'show_count' => true,
@@ -88,18 +95,33 @@ final class ListTable
       return;
     }
 
-    $screen = function_exists('get_current_screen') ? get_current_screen() : null;
-    if (!$screen || $screen->base !== 'upload') {
+    // get_current_screen() is often null during pre_get_posts — use $pagenow.
+    global $pagenow;
+    if ($pagenow !== 'upload.php') {
       return;
     }
 
-    $value = isset($_GET[$this->config->slug])
-      ? sanitize_text_field(wp_unslash((string) $_GET[$this->config->slug]))
+    $postType = $query->get('post_type');
+    if ($postType && $postType !== 'attachment' && !(is_array($postType) && in_array('attachment', $postType, true))) {
+      return;
+    }
+
+    $value = isset($_GET[self::FILTER_ARG])
+      ? sanitize_text_field(wp_unslash((string) $_GET[self::FILTER_ARG]))
       : '';
+
+    // Legacy / mistaken taxonomy query_var (expects a slug, not a term ID).
+    if (($value === '' || $value === '0') && isset($_GET[$this->config->slug])) {
+      $value = sanitize_text_field(wp_unslash((string) $_GET[$this->config->slug]));
+    }
 
     if ($value === '' || $value === '0') {
       return;
     }
+
+    // Ensure a mistaken taxonomy query_var (slug lookup) doesn't empty the results.
+    $query->set($this->config->slug, '');
+    unset($query->query_vars[$this->config->slug]);
 
     if ($value === Config::UNCATEGORIZED_QUERY) {
       $taxQuery = $query->get('tax_query');
@@ -120,6 +142,7 @@ final class ListTable
         'taxonomy' => $this->config->slug,
         'field' => 'term_id',
         'terms' => [(int) $value],
+        'include_children' => true,
       ];
       $query->set('tax_query', $taxQuery);
     }
@@ -144,27 +167,98 @@ final class ListTable
   }
 
   /**
-   * List-view bulk: redirect into a lightweight assign screen via query args.
-   * Actual assignment is handled client-side via the shared REST endpoint
-   * (see media-library.js). Here we only pass selected IDs through.
-   *
-   * @param list<int|string> $postIds
+   * @param list<int> $postIds
    */
-  public function handleBulkAction(string $redirectTo, string $action, array $postIds): string
+  public function handleBulkActionsFilter(string $location, string $doaction, array $postIds): string
   {
+    if ($doaction !== 'edit_media_categories') {
+      return $location;
+    }
+
+    $postIds = array_values(array_filter(array_map('intval', $postIds)));
+    if ($postIds === []) {
+      return $location;
+    }
+
+    return add_query_arg(
+      [
+        'mode' => 'list',
+        'media_categories_bulk' => 1,
+        'media_ids' => implode(',', $postIds),
+      ],
+      admin_url('upload.php'),
+    );
+  }
+
+  /**
+   * Process list-view bulk action early (load-upload.php runs before upload.php body).
+   */
+  public function handleBulkActionOnLoad(): void
+  {
+    $action = isset($_REQUEST['action']) && $_REQUEST['action'] !== '-1'
+      ? sanitize_text_field(wp_unslash((string) $_REQUEST['action']))
+      : '';
+
+    if ($action === '' || $action === '-1') {
+      $action = isset($_REQUEST['action2']) && $_REQUEST['action2'] !== '-1'
+        ? sanitize_text_field(wp_unslash((string) $_REQUEST['action2']))
+        : '';
+    }
+
     if ($action !== 'edit_media_categories') {
-      return $redirectTo;
+      return;
     }
 
-    $ids = array_values(array_filter(array_map('intval', $postIds)));
+    // Avoid dying on the follow-up GET after we already redirected.
+    if (!isset($_REQUEST['_wpnonce'])) {
+      return;
+    }
+
+    check_admin_referer('bulk-media');
+
+    $postIds = [];
+    if (isset($_REQUEST['media'])) {
+      $postIds = array_map('intval', (array) wp_unslash($_REQUEST['media']));
+    } elseif (isset($_REQUEST['ids'])) {
+      $postIds = array_map('intval', explode(',', (string) wp_unslash($_REQUEST['ids'])));
+    }
+
+    $postIds = array_values(array_filter($postIds));
+    if ($postIds === []) {
+      return;
+    }
+
+    $location = $this->handleBulkActionsFilter(admin_url('upload.php'), $action, $postIds);
+    wp_safe_redirect($location);
+    exit;
+  }
+
+  /**
+   * Boot the bulk panel from PHP when redirected back with selected IDs.
+   * Avoids relying solely on JS reading query args (and works if wp.media isn't loaded yet).
+   */
+  public function renderBulkPanelBoot(): void
+  {
+    if (!isset($_GET['media_categories_bulk']) || (string) $_GET['media_categories_bulk'] !== '1') {
+      return;
+    }
+
+    if (!current_user_can(Config::ASSIGN_CAP)) {
+      return;
+    }
+
+    $ids = isset($_GET['media_ids'])
+      ? array_values(array_filter(array_map('intval', explode(',', (string) wp_unslash($_GET['media_ids'])))))
+      : [];
+
     if ($ids === []) {
-      return $redirectTo;
+      return;
     }
 
-    return add_query_arg([
-      'media_categories_bulk' => 1,
-      'media_ids' => implode(',', $ids),
-    ], $redirectTo);
+    printf(
+      '<script>window.mediaCategoriesBulkIds = %s;</script>',
+      wp_json_encode($ids),
+    );
   }
 
   public function bulkAdminNotice(): void

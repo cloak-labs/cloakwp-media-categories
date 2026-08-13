@@ -123,7 +123,7 @@ final class Config
       'name' => $plural,
       'singular_name' => $singular,
       'menu_name' => $plural,
-      'all_items' => sprintf('All %s', $plural),
+      'all_items' => sprintf('All %s', strtolower($plural)),
       'edit_item' => sprintf('Edit %s', $singular),
       'view_item' => sprintf('View %s', $singular),
       'update_item' => sprintf('Update %s', $singular),
