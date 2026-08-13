@@ -110,12 +110,10 @@ Default taxonomy slug: `category_media`.
 ## Architecture (Core + Plugin)
 
 ```
-src/Core/      # Config, taxonomy registration, caps, term/query helpers (extractable library)
+src/Core/      # Config, taxonomy registration, caps, term/query helpers
 src/Plugin/    # Admin UI, REST, asset enqueue (WordPress integration)
 MediaCategories.php  # Fluent facade wiring Core + Plugin
 ```
-
-Asset-serving CloakWP packages should use `"type": "wordpress-muplugin"` so `plugin_dir_url()` works. Pure PHP libraries can stay `"type": "library"` in `vendor/`.
 
 ## Development
 
