@@ -6,17 +6,9 @@ namespace CloakWP\MediaCategories\Tests;
 
 use CloakWP\MediaCategories\MediaCategories;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
 
 final class MediaCategoriesFacadeTest extends TestCase
 {
-  protected function tearDown(): void
-  {
-    $ref = new ReflectionClass(MediaCategories::class);
-    $prop = $ref->getProperty('instance');
-    $prop->setValue(null);
-  }
-
   public function testFluentConfigBuildsExpectedValues(): void
   {
     $instance = MediaCategories::make()
