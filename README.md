@@ -63,7 +63,7 @@ Same defaults as the Composer path. Developers can still override config via flu
 
 ```php
 MediaCategories::make()
-  ->slug('category_media')              // keep default to preserve existing MCM data
+  ->slug('category_media')              // default
   ->restBase('media-categories')
   ->labels('Media Category', 'Media Categories')
   ->hierarchical()                      // default true
@@ -101,16 +101,11 @@ add_filter('cloakwp/media-categories/config', function ($config) {
 
 ## Data model
 
-Uses core taxonomy tables only (`wp_terms`, `wp_term_taxonomy`, `wp_term_relationships`) via `wp_set_object_terms()`. No custom tables, no options UI, no Freemius.
+Uses core taxonomy tables only (`wp_terms`, `wp_term_taxonomy`, `wp_term_relationships`) via `wp_set_object_terms()`. No custom tables, no options UI that saves config to the database (configure via PHP).
 
-Default slug `category_media` matches the old **WP Media Category Management** plugin so existing terms keep working.
+Default taxonomy slug: `category_media`.
 
-## Migrating from WP Media Category Management
-
-1. `composer remove wpackagist-plugin/wp-media-category-management`
-2. `composer require cloakwp/media-categories`
-3. Keep slug `category_media` (the default)
-4. Delete leftover MCM options if you want (`wp-media-category-management-options`, Freemius entries) — optional
+**Compatibility note:** If you currently use [WP Media Category Management](https://wordpress.org/plugins/wp-media-category-management/), this plugin is compatible with its data. Deactivate that plugin and activate this one — previously created categories and their assignments on media stay intact, as long as the taxonomy slug stays the same (it is `category_media` by default on both).
 
 ## Architecture (Core + Plugin)
 
