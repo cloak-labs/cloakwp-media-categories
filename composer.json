@@ -1,7 +1,6 @@
 {
   "name": "cloakwp/media-categories",
   "description": "Core-like media categories for WordPress — PHP-configured, no settings UI.",
-  "version": "0.1.0",
   "license": "LGPL-3.0-only",
   "type": "wordpress-muplugin",
   "authors": [
