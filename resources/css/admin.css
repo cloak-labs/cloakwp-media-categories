@@ -131,6 +131,15 @@
   line-height: 0;
 }
 
+/* Modal only: core type/date selects sit 32px down; 30px + middle
+   lines this wrap up with them. :last-of-type zeroes their right
+   margin, so restore the gap here. */
+.media-modal-content .media-categories-filter-wrap {
+  margin-top: 30px;
+  margin-left: 2%;
+  vertical-align: middle;
+}
+
 .tablenav .media-categories-filter-wrap,
 .wp-filter .media-categories-filter-wrap {
   margin-top: 0;
@@ -206,6 +215,7 @@
   display: block;
   margin: 0 0 8px;
   padding: 0;
+  min-height: 20px;
 }
 
 .media-categories-filter-terms {
