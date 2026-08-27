@@ -27,6 +27,8 @@ final class Assets
     add_action('admin_enqueue_scripts', [$this, 'registerHandles'], 1);
     add_action('admin_enqueue_scripts', [$this, 'enqueueOnUploadScreen'], 20);
     add_action('wp_enqueue_media', [$this, 'enqueueForMedia'], 20);
+    // ACF Image/Gallery/File fields on options pages, terms, users, etc.
+    add_action('acf/input/admin_enqueue_scripts', [$this, 'enqueueForAcf'], 20);
   }
 
   public function registerHandles(): void
@@ -75,10 +77,22 @@ final class Assets
   }
 
   /**
-   * Enqueue whenever wp_enqueue_media runs (grid library + editor modal).
+   * Enqueue whenever wp_enqueue_media runs (grid library + editor / ACF modal).
    */
   public function enqueueForMedia(): void
   {
+    $this->enqueue();
+  }
+
+  /**
+   * ACF fields can appear on screens that never hit upload.php / post.php.
+   * Ensure media-views is registered, then enqueue our modal filter script.
+   */
+  public function enqueueForAcf(): void
+  {
+    if (function_exists('wp_enqueue_media')) {
+      wp_enqueue_media();
+    }
     $this->enqueue();
   }
 
@@ -98,11 +112,11 @@ final class Assets
   }
 
   /**
-   * Enqueue on upload.php (list + grid) and attachment edit screens.
+   * Enqueue on upload.php (list + grid), post-new.php, and attachment edit screens.
    */
   public function enqueueOnUploadScreen(string $hookSuffix): void
   {
-    if (!in_array($hookSuffix, ['upload.php', 'post.php', 'media-upload.php', 'attachment'], true)) {
+    if (!in_array($hookSuffix, ['upload.php', 'post.php', 'post-new.php', 'media-upload.php', 'attachment'], true)) {
       return;
     }
 

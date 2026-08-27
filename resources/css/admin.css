@@ -117,7 +117,27 @@
   max-width: 16em;
 }
 
-.assign-categories-button.hidden {
+/*
+ * Media modal (ACF Image/Gallery/File, Add Media, featured image):
+ * Core sizes each `.attachment-filters` at ~48% of the toolbar and clips
+ * overflow at 60–72px. Type + date already fill the row, so a third
+ * "Media Category" dropdown wraps out of view. Shrink them so three fit.
+ */
+.media-modal-content .media-frame select.attachment-filters {
+  width: auto;
+  max-width: calc(32% - 8px);
+}
+
+.media-modal-content .media-frame select.attachment-filters.media-categories-filter {
+  max-width: 16em;
+}
+
+.media-modal .attachments-browser .media-toolbar {
+  overflow: visible;
+}
+
+.assign-categories-button.hidden,
+.media-modal .assign-categories-button {
   display: none !important;
 }
 
@@ -180,8 +200,8 @@
   color: #50575e;
 }
 
-/* Select-mode toolbar: keep our button beside Delete */
-.media-toolbar-mode-select .assign-categories-button {
+/* Media Library grid bulk-select: keep our button beside Delete */
+.mode-grid .media-toolbar-mode-select .assign-categories-button {
   display: inline-block !important;
   margin-left: 8px;
 }

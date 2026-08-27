@@ -95,7 +95,7 @@ add_filter('cloakwp/media-categories/config', function ($config) {
 ## Admin features
 
 - List view: filter dropdown (incl. Uncategorized), taxonomy column, bulk “Edit media categories…”
-- Grid / media modal: taxonomy filter
+- Grid / media modal: taxonomy filter (including ACF Image, Gallery, and File field pickers)
 - Attachment sidebar: checklist + **Add New Media Category** (REST `POST /wp/v2/media-categories`)
 - Grid **Bulk select**: Add to selected / Remove from selected via `POST /wp-json/media-categories/v1/bulk-assign`
 

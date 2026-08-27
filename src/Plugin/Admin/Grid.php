@@ -10,6 +10,9 @@ use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
 /**
  * Media Library grid / modal: taxonomy query filtering for AJAX attachment queries.
  * (Toolbar UI is injected by resources/js/media-library.js)
+ *
+ * Covers the Media Library grid, Add Media, featured image, and ACF Image /
+ * Gallery / File pickers — they all query via query-attachments.
  */
 final class Grid
 {

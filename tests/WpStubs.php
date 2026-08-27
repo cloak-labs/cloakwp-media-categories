@@ -35,6 +35,9 @@ final class WpStubs
   /** @var array<string, true> Existing term slugs, for core-style wp_set_object_terms simulation. */
   public static array $existingSlugs = [];
 
+  /** @var list<array{hook: mixed, callback: mixed, priority: mixed}> */
+  public static array $actions = [];
+
   public static function reset(): void
   {
     self::$postTypes = [];
@@ -46,5 +49,6 @@ final class WpStubs
     self::$checklistHtml = '';
     self::$insertedTermNames = [];
     self::$existingSlugs = [];
+    self::$actions = [];
   }
 }

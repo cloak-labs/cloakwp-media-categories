@@ -32,6 +32,11 @@ if (!function_exists('sanitize_key')) {
 if (!function_exists('add_action')) {
   function add_action($hook, $callback, $priority = 10, $accepted_args = 1): void
   {
+    \CloakWP\MediaCategories\Tests\WpStubs::$actions[] = [
+      'hook' => $hook,
+      'callback' => $callback,
+      'priority' => $priority,
+    ];
   }
 }
 

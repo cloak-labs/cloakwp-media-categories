@@ -233,15 +233,19 @@
   /* Grid / modal: patch AttachmentsBrowser                             */
   /* ------------------------------------------------------------------ */
 
-  function patchMediaBrowser() {
-    if (patchedBrowser) {
+  var MediaCategoryFilter = null;
+  var AssignCategoriesButton = null;
+  var boundAcfPopup = false;
+
+  function ensureMediaViews() {
+    if (MediaCategoryFilter) {
       return true;
     }
-    if (!window.wp || !wp.media || !wp.media.view || !wp.media.view.AttachmentsBrowser) {
+    if (!window.wp || !wp.media || !wp.media.view || !wp.media.view.AttachmentFilters) {
       return false;
     }
 
-    var MediaCategoryFilter = wp.media.view.AttachmentFilters.extend({
+    MediaCategoryFilter = wp.media.view.AttachmentFilters.extend({
       id: 'media-categories-attachment-filter',
       className: 'attachment-filters media-categories-filter',
 
@@ -275,11 +279,28 @@
 
         this.filters = filters;
       },
+
+      /**
+       * Keep mime-type restrictions from the current query (ACF Image/File
+       * fields set library.type = image). Core set() only applies our props.
+       */
+      change: function () {
+        var filter = this.filters[this.el.value];
+        if (!filter) {
+          return;
+        }
+        var props = $.extend({}, filter.props);
+        var currentType = this.model && this.model.get ? this.model.get('type') : null;
+        if (currentType && props.type === undefined) {
+          props.type = currentType;
+        }
+        this.model.set(props);
+      },
     });
 
     var Button = wp.media.view.Button;
 
-    var AssignCategoriesButton = Button.extend({
+    AssignCategoriesButton = Button.extend({
       className: 'button media-button assign-categories-button hidden',
       defaults: {
         text: labels.bulkEdit || 'Edit categories',
@@ -323,7 +344,12 @@
 
       render: function () {
         Button.prototype.render.apply(this, arguments);
-        if (this.controller.isModeActive('select')) {
+        // Grid bulk-select only — picker modals (ACF Image, Add Media) are
+        // already "select" frames and use the attachment sidebar instead.
+        if (
+          this.controller.isModeActive('grid') &&
+          this.controller.isModeActive('select')
+        ) {
           this.$el.removeClass('hidden');
         } else {
           this.$el.addClass('hidden');
@@ -333,34 +359,115 @@
       },
     });
 
+    return true;
+  }
+
+  /**
+   * Add the category dropdown to an AttachmentsBrowser toolbar.
+   * Used from createToolbar and again when ACF activates its browse state
+   * (ACF builds a fresh Select frame per Image/Gallery/File click).
+   */
+  function injectCategoryFilter(browser) {
+    if (!ensureMediaViews() || !browser || !browser.toolbar || !browser.collection) {
+      return;
+    }
+    if (browser.toolbar.get('MediaCategoryFilter')) {
+      return;
+    }
+
+    if (wp.media.view.Label) {
+      browser.toolbar.set(
+        'MediaCategoryFilterLabel',
+        new wp.media.view.Label({
+          value: labels.filterBy || 'Filter by Media Category',
+          attributes: {
+            'for': 'media-categories-attachment-filter',
+          },
+          priority: -74,
+        }).render()
+      );
+    }
+
+    browser.toolbar.set(
+      'MediaCategoryFilter',
+      new MediaCategoryFilter({
+        controller: browser.controller,
+        model: browser.collection.props,
+        priority: -74,
+      }).render()
+    );
+
+    if (
+      settings.assignCap &&
+      AssignCategoriesButton &&
+      !browser.toolbar.get('AssignCategoriesButton') &&
+      browser.controller &&
+      typeof browser.controller.isModeActive === 'function' &&
+      browser.controller.isModeActive('grid')
+    ) {
+      browser.toolbar.set(
+        'AssignCategoriesButton',
+        new AssignCategoriesButton({
+          controller: browser.controller,
+          priority: -60,
+        }).render()
+      );
+    }
+  }
+
+  function bindMediaFrame(frame) {
+    if (!frame || frame._mediaCategoriesBound || typeof frame.on !== 'function') {
+      return;
+    }
+    frame._mediaCategoriesBound = true;
+    frame.on('content:activate:browse', function () {
+      var browser = null;
+      try {
+        browser = frame.content.get();
+      } catch (e) {
+        return;
+      }
+      injectCategoryFilter(browser);
+    });
+  }
+
+  function bindAcfMediaPopups() {
+    if (boundAcfPopup) {
+      return true;
+    }
+    if (!window.acf || typeof acf.addAction !== 'function') {
+      return false;
+    }
+    acf.addAction('new_media_popup', function (popup) {
+      patchMediaBrowser();
+      if (popup && popup.frame) {
+        bindMediaFrame(popup.frame);
+      }
+    });
+    boundAcfPopup = true;
+    return true;
+  }
+
+  function patchMediaBrowser() {
+    if (!ensureMediaViews()) {
+      return false;
+    }
+    if (!wp.media.view.AttachmentsBrowser) {
+      return false;
+    }
+
+    bindAcfMediaPopups();
+
+    if (patchedBrowser) {
+      return true;
+    }
+
     // Mutate the prototype in place so any cached constructor reference still picks this up.
     var proto = wp.media.view.AttachmentsBrowser.prototype;
     var originalCreateToolbar = proto.createToolbar;
     proto.createToolbar = function () {
       originalCreateToolbar.apply(this, arguments);
-
-      if (this.toolbar.get('MediaCategoryFilter')) {
-        return;
-      }
-
-      this.toolbar.set(
-        'MediaCategoryFilter',
-        new MediaCategoryFilter({
-          controller: this.controller,
-          model: this.collection.props,
-          priority: -75,
-        }).render()
-      );
-
-      if (settings.assignCap) {
-        this.toolbar.set(
-          'AssignCategoriesButton',
-          new AssignCategoriesButton({
-            controller: this.controller,
-            priority: -60,
-          }).render()
-        );
-      }
+      injectCategoryFilter(this);
     };
 
     patchedBrowser = true;
@@ -647,8 +754,9 @@
   $(function () {
     initAddNewHandlers();
     initListBulkFromQuery();
-    // One more attempt after other footer scripts (media-grid) have run.
+    // One more attempt after other footer scripts (media-grid, acf-input) have run.
     patchMediaBrowser();
+    bindAcfMediaPopups();
     patchAttachmentCompatSave();
   });
 })(window, jQuery);
