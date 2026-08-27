@@ -117,19 +117,123 @@
   max-width: 16em;
 }
 
+.media-categories-filter-not-wrap {
+  display: inline-block;
+  margin-left: 8px;
+  line-height: 2;
+}
+
+.media-categories-filter-wrap {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 2% 0 0;
+  line-height: 0;
+}
+
+.tablenav .media-categories-filter-wrap {
+  margin-top: 0;
+  margin-right: 8px;
+  vertical-align: top;
+}
+
+.media-categories-filter-toggle {
+  box-sizing: border-box;
+  max-width: 16em;
+  min-width: 11em;
+  min-height: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0 24px 0 8px;
+  border: 1px solid #8c8f94;
+  border-radius: 3px;
+  background: #fff url(data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%206l5%205%205-5%202%201-7%207-7-7%202-1z%22%20fill%3D%22%23555%22%2F%3E%3C%2Fsvg%3E) no-repeat right 5px top 55%;
+  background-size: 16px 16px;
+  font-size: 14px;
+  line-height: 2;
+  color: #2c3338;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  vertical-align: top;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.media-categories-filter-toggle:hover,
+.media-categories-filter-toggle:focus {
+  border-color: #2271b1;
+}
+
+.media-categories-filter-panel {
+  position: fixed;
+  z-index: 160010;
+  box-sizing: border-box;
+  width: 240px;
+  max-height: min(320px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #c3c4c7;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+}
+
+.media-categories-filter-panel.hidden {
+  display: none;
+}
+
+.media-categories-filter-mode {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.media-categories-filter-mode .button {
+  flex: 1;
+}
+
+.media-categories-filter-clear {
+  display: block;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.media-categories-filter-terms {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #dcdcde;
+}
+
+.media-categories-filter-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 4px 0;
+  line-height: 1.3;
+  font-size: 13px;
+}
+
+.wp-core-ui .media-categories-filter-row input[type="checkbox"] {
+  margin: 1px 0 0;
+  flex-shrink: 0;
+}
+
+.media-categories-filter-row span {
+  min-width: 0;
+}
+
 /*
  * Media modal (ACF Image/Gallery/File, Add Media, featured image):
  * Core sizes each `.attachment-filters` at ~48% of the toolbar and clips
  * overflow at 60–72px. Type + date already fill the row, so a third
- * "Media Category" dropdown wraps out of view. Shrink them so three fit.
+ * filter wraps out of view. Shrink them so they fit beside our dropdown.
  */
 .media-modal-content .media-frame select.attachment-filters {
   width: auto;
   max-width: calc(32% - 8px);
-}
-
-.media-modal-content .media-frame select.attachment-filters.media-categories-filter {
-  max-width: 16em;
 }
 
 .media-modal .attachments-browser .media-toolbar {

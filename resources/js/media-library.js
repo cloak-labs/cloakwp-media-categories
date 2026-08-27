@@ -17,6 +17,84 @@
   var taxonomy = settings.taxonomy;
   var labels = settings.labels || {};
   var patchedBrowser = false;
+  var openFilterView = null;
+  var filterDocBound = false;
+
+  function termPrefix(depth) {
+    var prefix = '';
+    var d = parseInt(depth, 10) || 0;
+    while (d-- > 0) {
+      prefix += '- ';
+    }
+    return prefix;
+  }
+
+  function encodeFilterValue(mode, selected) {
+    selected = selected || [];
+    if (!selected.length) {
+      return '';
+    }
+    if (selected.indexOf(settings.uncategorized) !== -1) {
+      return mode === 'not' ? 'not:' + settings.uncategorized : settings.uncategorized;
+    }
+    var ids = selected
+      .map(function (id) {
+        return parseInt(id, 10);
+      })
+      .filter(function (id) {
+        return id > 0;
+      });
+    if (!ids.length) {
+      return '';
+    }
+    var joined = ids.join(',');
+    return mode === 'not' ? 'not:' + joined : joined;
+  }
+
+  function parseFilterValue(value) {
+    var raw = $.trim(String(value == null ? '' : value));
+    var mode = 'in';
+    if (raw.indexOf('not:') === 0) {
+      mode = 'not';
+      raw = $.trim(raw.slice(4));
+    }
+    if (!raw || raw === '0') {
+      return { mode: mode, selected: [] };
+    }
+    if (raw === settings.uncategorized) {
+      return { mode: mode, selected: [settings.uncategorized] };
+    }
+    var selected = raw
+      .split(',')
+      .map(function (part) {
+        return parseInt($.trim(part), 10);
+      })
+      .filter(function (id) {
+        return id > 0;
+      });
+    return { mode: mode, selected: selected };
+  }
+
+  function bindFilterDocumentEvents() {
+    if (filterDocBound) {
+      return;
+    }
+    filterDocBound = true;
+    $(document).on('click.mediaCategoriesFilter', function (e) {
+      if (!openFilterView) {
+        return;
+      }
+      if ($(e.target).closest('.media-categories-filter-wrap').length) {
+        return;
+      }
+      openFilterView.closePanel();
+    });
+    $(document).on('keydown.mediaCategoriesFilter', function (e) {
+      if ((e.key === 'Escape' || e.keyCode === 27) && openFilterView) {
+        openFilterView.closePanel();
+      }
+    });
+  }
 
   /* ------------------------------------------------------------------ */
   /* Shared bulk panel                                                  */
@@ -37,7 +115,7 @@
           '<input type="checkbox" value="' +
           term.id +
           '" /> ' +
-          $('<div>').text(term.name).html() +
+          $('<div>').text(termPrefix(term.depth) + term.name).html() +
           '</label>'
         );
       })
@@ -241,60 +319,272 @@
     if (MediaCategoryFilter) {
       return true;
     }
-    if (!window.wp || !wp.media || !wp.media.view || !wp.media.view.AttachmentFilters) {
+    if (!window.wp || !wp.media || !wp.media.view || !wp.media.View) {
       return false;
     }
 
-    MediaCategoryFilter = wp.media.view.AttachmentFilters.extend({
-      id: 'media-categories-attachment-filter',
-      className: 'attachment-filters media-categories-filter',
+    MediaCategoryFilter = wp.media.View.extend({
+      tagName: 'div',
+      className: 'media-categories-filter-wrap',
 
-      createFilters: function () {
-        var filters = {};
-        var terms = settings.terms || [];
-
-        filters.all = {
-          text: labels.all || 'All',
-          priority: 10,
-          props: {},
-        };
-        filters.all.props[taxonomy] = '';
-
-        filters.uncategorized = {
-          text: labels.uncategorized || 'Uncategorized',
-          priority: 15,
-          props: {},
-        };
-        filters.uncategorized.props[taxonomy] = settings.uncategorized;
-
-        terms.forEach(function (term) {
-          var key = 'term_' + term.id;
-          filters[key] = {
-            text: term.name + ' (' + term.count + ')',
-            priority: 20 + term.id,
-            props: {},
-          };
-          filters[key].props[taxonomy] = term.id;
-        });
-
-        this.filters = filters;
+      events: {
+        'click .media-categories-filter-toggle': 'onToggle',
+        'click .media-categories-filter-mode-btn': 'onMode',
+        'click .media-categories-filter-clear': 'onClear',
+        'change .media-categories-filter-term': 'onTermChange',
       },
 
-      /**
-       * Keep mime-type restrictions from the current query (ACF Image/File
-       * fields set library.type = image). Core set() only applies our props.
-       */
-      change: function () {
-        var filter = this.filters[this.el.value];
-        if (!filter) {
+      initialize: function () {
+        this.live = this.options.live !== false;
+        this.panelOpen = false;
+        this.filterMode = 'in';
+        this.selected = [];
+        this.toggleId =
+          this.options.toggleId || 'media-categories-attachment-filter-' + this.cid;
+        this.syncFromModel();
+        if (this.model && typeof this.model.on === 'function') {
+          this.model.on('change:' + taxonomy, this.syncFromModel, this);
+        }
+      },
+
+      syncFromModel: function () {
+        var encoded = '';
+        if (this.options.encoded != null && this.options.encoded !== '') {
+          encoded = this.options.encoded;
+          this.options.encoded = null;
+        } else if (this.model && typeof this.model.get === 'function') {
+          encoded = this.model.get(taxonomy) || '';
+        }
+        var parsed = parseFilterValue(encoded);
+        this.filterMode = parsed.mode;
+        this.selected = parsed.selected;
+        if (this.$el && this.$el.length && this.$('.media-categories-filter-toggle').length) {
+          this.syncPanelState();
+          this.updateToggleLabel();
+        }
+      },
+
+      termRowsHtml: function () {
+        return (settings.terms || [])
+          .map(function (term) {
+            var text = termPrefix(term.depth) + term.name + ' (' + term.count + ')';
+            return (
+              '<label class="media-categories-filter-row">' +
+              '<input type="checkbox" class="media-categories-filter-term" value="' +
+              term.id +
+              '" /> ' +
+              '<span>' +
+              $('<div>').text(text).html() +
+              '</span></label>'
+            );
+          })
+          .join('');
+      },
+
+      render: function () {
+        var panelId = 'media-categories-filter-panel-' + this.cid;
+        var toggleId = this.toggleId;
+
+        this.$el.html(
+          '<button type="button" class="media-categories-filter-toggle" id="' +
+            toggleId +
+            '" aria-expanded="false" aria-controls="' +
+            panelId +
+            '" aria-haspopup="true">' +
+            '</button>' +
+            '<div class="media-categories-filter-panel hidden" id="' +
+            panelId +
+            '" role="dialog" aria-label="' +
+            $('<div>').text(labels.filterBy || 'Filter by Media Category').html() +
+            '">' +
+            '<div class="media-categories-filter-mode" role="group" aria-label="' +
+            $('<div>').text(labels.filterBy || 'Filter by Media Category').html() +
+            '">' +
+            '<button type="button" class="button media-categories-filter-mode-btn" data-mode="in">' +
+            $('<div>').text(labels.include || 'In').html() +
+            '</button>' +
+            '<button type="button" class="button media-categories-filter-mode-btn" data-mode="not">' +
+            $('<div>').text(labels.exclude || 'Not in').html() +
+            '</button>' +
+            '</div>' +
+            '<button type="button" class="button-link media-categories-filter-clear">' +
+            $('<div>').text(labels.all || 'All').html() +
+            '</button>' +
+            '<label class="media-categories-filter-row">' +
+            '<input type="checkbox" class="media-categories-filter-term" value="' +
+            settings.uncategorized +
+            '" /> ' +
+            '<span>' +
+            $('<div>').text(labels.uncategorized || 'Uncategorized').html() +
+            '</span></label>' +
+            '<div class="media-categories-filter-terms">' +
+            this.termRowsHtml() +
+            '</div></div>'
+        );
+
+        this.syncPanelState();
+        this.updateToggleLabel();
+        return this;
+      },
+
+      syncPanelState: function () {
+        var self = this;
+        var selected = this.selected.map(String);
+        this.$('.media-categories-filter-term').each(function () {
+          this.checked = selected.indexOf(String(this.value)) !== -1;
+        });
+        this.$('.media-categories-filter-mode-btn').each(function () {
+          var on = this.getAttribute('data-mode') === self.filterMode;
+          this.setAttribute('aria-pressed', on ? 'true' : 'false');
+          $(this).toggleClass('button-primary', on);
+        });
+      },
+
+      updateToggleLabel: function () {
+        var text = labels.all || 'All';
+        var selected = this.selected;
+        if (selected.length === 1 && selected[0] === settings.uncategorized) {
+          text =
+            this.filterMode === 'not'
+              ? labels.categorized || 'Categorized'
+              : labels.uncategorized || 'Uncategorized';
+        } else if (selected.length === 1) {
+          var term = (settings.terms || []).filter(function (item) {
+            return item.id === selected[0];
+          })[0];
+          text = term ? term.name : String(selected[0]);
+          if (this.filterMode === 'not') {
+            text = (labels.exclude || 'Not in') + ' ' + text;
+          }
+        } else if (selected.length > 1) {
+          var countLabel = (labels.selectedCount || '%d selected').replace(
+            '%d',
+            String(selected.length)
+          );
+          text =
+            this.filterMode === 'not'
+              ? (labels.exclude || 'Not in') + ' · ' + countLabel
+              : countLabel;
+        }
+        this.$('.media-categories-filter-toggle').text(text);
+      },
+
+      collectSelected: function () {
+        return this.$('.media-categories-filter-term:checked')
+          .map(function () {
+            return this.value === settings.uncategorized
+              ? settings.uncategorized
+              : parseInt(this.value, 10);
+          })
+          .get();
+      },
+
+      applyFilter: function () {
+        var encoded = encodeFilterValue(this.filterMode, this.selected);
+        this.updateToggleLabel();
+        if (this.options.$input && this.options.$input.length) {
+          this.options.$input.val(encoded);
+        }
+        if (!this.live || !this.model || typeof this.model.set !== 'function') {
           return;
         }
-        var props = $.extend({}, filter.props);
-        var currentType = this.model && this.model.get ? this.model.get('type') : null;
-        if (currentType && props.type === undefined) {
+        var props = {};
+        props[taxonomy] = encoded;
+        var currentType = this.model.get('type');
+        if (currentType) {
           props.type = currentType;
         }
         this.model.set(props);
+      },
+
+      onToggle: function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.panelOpen) {
+          this.closePanel();
+        } else {
+          this.openPanel();
+        }
+      },
+
+      onMode: function (e) {
+        e.preventDefault();
+        this.filterMode = $(e.currentTarget).attr('data-mode') === 'not' ? 'not' : 'in';
+        this.syncPanelState();
+        if (this.selected.length) {
+          this.applyFilter();
+        } else {
+          this.updateToggleLabel();
+        }
+      },
+
+      onClear: function (e) {
+        e.preventDefault();
+        this.selected = [];
+        this.syncPanelState();
+        this.applyFilter();
+      },
+
+      onTermChange: function (e) {
+        var $input = $(e.currentTarget);
+        var value = $input.val();
+        if ($input.prop('checked') && value === settings.uncategorized) {
+          this.$('.media-categories-filter-term')
+            .not($input)
+            .prop('checked', false);
+        } else if ($input.prop('checked')) {
+          this.$('.media-categories-filter-term[value="' + settings.uncategorized + '"]').prop(
+            'checked',
+            false
+          );
+        }
+        this.selected = this.collectSelected();
+        this.applyFilter();
+      },
+
+      openPanel: function () {
+        if (openFilterView && openFilterView !== this) {
+          openFilterView.closePanel();
+        }
+        bindFilterDocumentEvents();
+        this.panelOpen = true;
+        openFilterView = this;
+        this.$('.media-categories-filter-panel').removeClass('hidden');
+        this.$('.media-categories-filter-toggle').attr('aria-expanded', 'true');
+        this.positionPanel();
+        $(window).on(
+          'resize.mediaCategoriesFilter-' + this.cid,
+          $.proxy(this.positionPanel, this)
+        );
+      },
+
+      closePanel: function () {
+        this.panelOpen = false;
+        if (openFilterView === this) {
+          openFilterView = null;
+        }
+        this.$('.media-categories-filter-panel').addClass('hidden');
+        this.$('.media-categories-filter-toggle').attr('aria-expanded', 'false');
+        $(window).off('resize.mediaCategoriesFilter-' + this.cid);
+      },
+
+      positionPanel: function () {
+        var $panel = this.$('.media-categories-filter-panel');
+        var toggle = this.$('.media-categories-filter-toggle').get(0);
+        if (!$panel.length || !toggle) {
+          return;
+        }
+        var rect = toggle.getBoundingClientRect();
+        var gutter = 8;
+        var width = $panel.outerWidth() || 240;
+        var left = rect.left;
+        if (left + width > window.innerWidth - gutter) {
+          left = Math.max(gutter, window.innerWidth - width - gutter);
+        }
+        $panel.css({
+          top: Math.round(rect.bottom + 4),
+          left: Math.round(left),
+        });
       },
     });
 
@@ -375,27 +665,27 @@
       return;
     }
 
+    var filterView = new MediaCategoryFilter({
+      controller: browser.controller,
+      model: browser.collection.props,
+      live: true,
+      priority: -74,
+    }).render();
+
     if (wp.media.view.Label) {
       browser.toolbar.set(
         'MediaCategoryFilterLabel',
         new wp.media.view.Label({
           value: labels.filterBy || 'Filter by Media Category',
           attributes: {
-            'for': 'media-categories-attachment-filter',
+            'for': filterView.toggleId,
           },
           priority: -74,
         }).render()
       );
     }
 
-    browser.toolbar.set(
-      'MediaCategoryFilter',
-      new MediaCategoryFilter({
-        controller: browser.controller,
-        model: browser.collection.props,
-        priority: -74,
-      }).render()
-    );
+    browser.toolbar.set('MediaCategoryFilter', filterView);
 
     if (
       settings.assignCap &&
@@ -739,6 +1029,57 @@
     openBulkPanel(ids, $('#posts-filter .bulkactions').first());
   }
 
+  function enhanceListFilter() {
+    var $select = $('#media-categories-filter');
+    if (!$select.length || $select.data('mediaCategoriesEnhanced')) {
+      return;
+    }
+    if (!window.Backbone || !Backbone.Model || !ensureMediaViews() || !MediaCategoryFilter) {
+      return;
+    }
+    $select.data('mediaCategoriesEnhanced', true);
+
+    var encoded = $select.attr('data-encoded') || $select.val() || '';
+    var parsed = parseFilterValue(encoded);
+    if (
+      $('#media-categories-filter-not').is(':checked') &&
+      parsed.mode === 'in' &&
+      parsed.selected.length
+    ) {
+      parsed.mode = 'not';
+    }
+    encoded = encodeFilterValue(parsed.mode, parsed.selected);
+
+    var $hidden = $('<input type="hidden" />')
+      .attr({
+        name: $select.attr('name'),
+        id: 'media-categories-filter-value',
+      })
+      .val(encoded);
+    $select.removeAttr('name');
+
+    var model = new Backbone.Model();
+    model.set(taxonomy, encoded);
+
+    var view = new MediaCategoryFilter({
+      model: model,
+      live: false,
+      $input: $hidden,
+      encoded: encoded,
+      toggleId: 'media-categories-filter-toggle',
+    });
+    view.render();
+
+    $select.hide().after($hidden).after(view.$el);
+    $('.media-categories-filter-not-wrap').hide();
+    $('label[for="media-categories-filter"]').attr('for', 'media-categories-filter-toggle');
+
+    $select.closest('form').on('submit.mediaCategoriesFilter', function () {
+      $hidden.val(encodeFilterValue(view.filterMode, view.selected));
+      $('#media-categories-filter-not').prop('checked', false);
+    });
+  }
+
   // Patch as soon as media-views is available; retry on ready if needed.
   if (!patchMediaBrowser()) {
     $(function () {
@@ -757,6 +1098,7 @@
     // One more attempt after other footer scripts (media-grid, acf-input) have run.
     patchMediaBrowser();
     bindAcfMediaPopups();
+    enhanceListFilter();
     patchAttachmentCompatSave();
   });
 })(window, jQuery);

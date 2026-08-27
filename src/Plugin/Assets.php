@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CloakWP\MediaCategories\Plugin;
 
 use CloakWP\MediaCategories\Core\Config;
+use CloakWP\MediaCategories\Core\Support\TermTree;
 
 /**
  * Registers and enqueues admin JS/CSS via plugin_dir_url().
@@ -143,15 +144,7 @@ final class Assets
         'hide_empty' => false,
       ]);
       if (!is_wp_error($terms)) {
-        foreach ($terms as $term) {
-          $termList[] = [
-            'id' => (int) $term->term_id,
-            'name' => $term->name,
-            'slug' => $term->slug,
-            'parent' => (int) $term->parent,
-            'count' => (int) $term->count,
-          ];
-        }
+        $termList = TermTree::flatten($terms);
       }
     }
 
@@ -169,6 +162,10 @@ final class Assets
         'all' => $taxLabels?->all_items ?? sprintf('All %s', strtolower($plural)),
         'filterBy' => $taxLabels?->filter_by_item ?? sprintf('Filter by %s', $singular),
         'uncategorized' => 'Uncategorized',
+        'categorized' => 'Categorized',
+        'include' => 'In',
+        'exclude' => 'Not in',
+        'selectedCount' => '%d selected',
         'bulkEdit' => sprintf('Edit %s', strtolower($plural)),
         'addToSelected' => 'Add to selected',
         'removeFromSelected' => 'Remove from selected',

@@ -6,6 +6,7 @@ namespace CloakWP\MediaCategories\Plugin\Admin;
 
 use CloakWP\MediaCategories\Core\Config;
 use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
+use CloakWP\MediaCategories\Core\Support\TermTree;
 use WP_Query;
 
 /**
@@ -41,6 +42,10 @@ final class ListTable
       return;
     }
 
+    if ($which !== 'top') {
+      return;
+    }
+
     $taxonomy = get_taxonomy($this->config->slug);
     if (!$taxonomy) {
       return;
@@ -50,43 +55,58 @@ final class ListTable
       ? sanitize_text_field(wp_unslash((string) $_GET[self::FILTER_ARG]))
       : '';
 
+    $parsed = AttachmentQuery::parse($selected);
+    $notChecked = $parsed['mode'] === AttachmentQuery::MODE_NOT;
+    $selectedValue = '';
+    if ($parsed['uncategorized']) {
+      $selectedValue = Config::UNCATEGORIZED_QUERY;
+    } elseif (count($parsed['termIds']) === 1) {
+      $selectedValue = (string) $parsed['termIds'][0];
+    } elseif ($parsed['termIds'] !== []) {
+      $selectedValue = implode(',', $parsed['termIds']);
+    }
+
     $label = $taxonomy->labels->filter_by_item ?? sprintf('Filter by %s', $this->config->singularLabel);
+    $allLabel = $taxonomy->labels->all_items ?? sprintf('All %s', strtolower($this->config->pluralLabel));
 
     echo '<label class="screen-reader-text" for="media-categories-filter">' . esc_html($label) . '</label>';
-
-    $dropdown = wp_dropdown_categories([
-      'taxonomy' => $this->config->slug,
-      'name' => self::FILTER_ARG,
-      'id' => 'media-categories-filter',
-      'show_option_all' => $taxonomy->labels->all_items ?? sprintf('All %s', strtolower($this->config->pluralLabel)),
-      'hide_empty' => false,
-      'hierarchical' => $this->config->hierarchical,
-      'show_count' => true,
-      'orderby' => 'name',
-      'selected' => is_numeric($selected) ? (int) $selected : 0,
-      'echo' => false,
-      'value_field' => 'term_id',
-    ]);
-
-    // Inject Uncategorized option after "All".
-    $uncategorizedLabel = esc_html__('Uncategorized', 'media-categories');
-    $uncategorizedValue = Config::UNCATEGORIZED_QUERY;
-    $selectedAttr = $selected === $uncategorizedValue ? ' selected="selected"' : '';
-    $option = sprintf(
+    echo '<select name="' . esc_attr(self::FILTER_ARG) . '" id="media-categories-filter" class="media-categories-filter-select" data-encoded="' . esc_attr($selected) . '">';
+    printf(
+      '<option value=""%s>%s</option>',
+      $selectedValue === '' ? ' selected="selected"' : '',
+      esc_html($allLabel),
+    );
+    printf(
       '<option value="%s"%s>%s</option>',
-      esc_attr($uncategorizedValue),
-      $selectedAttr,
-      $uncategorizedLabel,
+      esc_attr(Config::UNCATEGORIZED_QUERY),
+      $selectedValue === Config::UNCATEGORIZED_QUERY ? ' selected="selected"' : '',
+      esc_html__('Uncategorized', 'media-categories'),
     );
 
-    $dropdown = preg_replace(
-      '/(<option[^>]*value="0"[^>]*>.*?<\/option>)/',
-      '$1' . $option,
-      $dropdown,
-      1,
-    );
+    $terms = get_terms([
+      'taxonomy' => $this->config->slug,
+      'hide_empty' => false,
+    ]);
+    if (!is_wp_error($terms)) {
+      foreach (TermTree::flatten($terms) as $term) {
+        $optionValue = (string) $term['id'];
+        $optionLabel = TermTree::prefix($term['depth']) . $term['name'] . ' (' . $term['count'] . ')';
+        $isSelected = $selectedValue === $optionValue;
+        printf(
+          '<option value="%s"%s>%s</option>',
+          esc_attr($optionValue),
+          $isSelected ? ' selected="selected"' : '',
+          esc_html($optionLabel),
+        );
+      }
+    }
 
-    echo $dropdown; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+    echo '</select>';
+    printf(
+      '<label class="media-categories-filter-not-wrap"><input type="checkbox" name="media_category_not" id="media-categories-filter-not" value="1"%s /> %s</label>',
+      $notChecked ? ' checked="checked"' : '',
+      esc_html__('Not in', 'media-categories'),
+    );
   }
 
   public function filterQuery(WP_Query $query): void
@@ -115,6 +135,10 @@ final class ListTable
       $value = sanitize_text_field(wp_unslash((string) $_GET[$this->config->slug]));
     }
 
+    if (!empty($_GET['media_category_not']) && $value !== '' && $value !== '0' && !str_starts_with($value, AttachmentQuery::NOT_PREFIX)) {
+      $value = AttachmentQuery::NOT_PREFIX . $value;
+    }
+
     if ($value === '' || $value === '0') {
       return;
     }
@@ -123,28 +147,9 @@ final class ListTable
     $query->set($this->config->slug, '');
     unset($query->query_vars[$this->config->slug]);
 
-    if ($value === Config::UNCATEGORIZED_QUERY) {
-      $taxQuery = $query->get('tax_query');
-      if (!is_array($taxQuery)) {
-        $taxQuery = [];
-      }
-      $taxQuery[] = $this->attachmentQuery->uncategorizedClause();
-      $query->set('tax_query', $taxQuery);
-      return;
-    }
-
-    if (is_numeric($value)) {
-      $taxQuery = $query->get('tax_query');
-      if (!is_array($taxQuery)) {
-        $taxQuery = [];
-      }
-      $taxQuery[] = [
-        'taxonomy' => $this->config->slug,
-        'field' => 'term_id',
-        'terms' => [(int) $value],
-        'include_children' => true,
-      ];
-      $query->set('tax_query', $taxQuery);
+    $vars = $this->attachmentQuery->applyToArgs(['tax_query' => $query->get('tax_query') ?: []], $value);
+    if (isset($vars['tax_query'])) {
+      $query->set('tax_query', $vars['tax_query']);
     }
   }
 
