@@ -33,6 +33,7 @@ final class AttachmentQueryTest extends TestCase
         'taxonomy' => 'category_media',
         'field' => 'term_id',
         'terms' => [12],
+        'operator' => 'IN',
         'include_children' => true,
       ],
     ], $args['tax_query']);
@@ -73,5 +74,47 @@ final class AttachmentQueryTest extends TestCase
     $clause = $this->query->uncategorizedClause();
     $this->assertSame('category_media', $clause['taxonomy']);
     $this->assertSame('NOT EXISTS', $clause['operator']);
+  }
+
+  public function testMultipleTermIdsUseIn(): void
+  {
+    $args = $this->query->applyToArgs([], '12,15,18');
+
+    $this->assertSame([12, 15, 18], $args['tax_query'][0]['terms']);
+    $this->assertSame('IN', $args['tax_query'][0]['operator']);
+  }
+
+  public function testNotPrefixExcludesTerms(): void
+  {
+    $args = $this->query->applyToArgs([], 'not:12,15');
+
+    $this->assertSame([12, 15], $args['tax_query'][0]['terms']);
+    $this->assertSame('NOT IN', $args['tax_query'][0]['operator']);
+  }
+
+  public function testNotUncategorizedUsesExists(): void
+  {
+    $args = $this->query->applyToArgs([], 'not:uncategorized');
+
+    $this->assertSame([
+      [
+        'taxonomy' => 'category_media',
+        'operator' => 'EXISTS',
+      ],
+    ], $args['tax_query']);
+  }
+
+  public function testParseAndEncodeRoundTrip(): void
+  {
+    $this->assertSame('12,15', AttachmentQuery::encode('in', [12, 15]));
+    $this->assertSame('not:12,15', AttachmentQuery::encode('not', [12, 15]));
+    $this->assertSame('uncategorized', AttachmentQuery::encode('in', [], true));
+    $this->assertSame('not:uncategorized', AttachmentQuery::encode('not', [], true));
+    $this->assertSame('', AttachmentQuery::encode('in', []));
+
+    $parsed = AttachmentQuery::parse('not:4,8');
+    $this->assertSame(AttachmentQuery::MODE_NOT, $parsed['mode']);
+    $this->assertSame([4, 8], $parsed['termIds']);
+    $this->assertFalse($parsed['empty']);
   }
 }

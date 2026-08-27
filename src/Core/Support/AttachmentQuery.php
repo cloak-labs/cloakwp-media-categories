@@ -8,9 +8,22 @@ use CloakWP\MediaCategories\Core\Config;
 
 /**
  * Builds tax_query fragments for media library filtering.
+ *
+ * Filter values are a compact string so they survive wp_ajax_query_attachments()'s
+ * taxonomy-query_var allowlist (one key, the taxonomy slug):
+ *
+ * - `` (empty) — no filter
+ * - `uncategorized` — no terms assigned
+ * - `not:uncategorized` — at least one term assigned
+ * - `12` / `12,15` — in any of these terms (children included)
+ * - `not:12,15` — in none of these terms (children included)
  */
 final class AttachmentQuery
 {
+  public const MODE_IN = 'in';
+  public const MODE_NOT = 'not';
+  public const NOT_PREFIX = 'not:';
+
   public function __construct(
     private readonly Config $config,
   ) {
@@ -24,29 +37,120 @@ final class AttachmentQuery
    */
   public function applyToArgs(array $args, string|int|null $value): array
   {
-    if ($value === null || $value === '') {
+    $parsed = self::parse($value);
+    if ($parsed['empty']) {
       return $args;
     }
 
-    $value = (string) $value;
-
-    if ($value === Config::UNCATEGORIZED_QUERY) {
-      $args['tax_query'] = $this->mergeTaxQuery($args['tax_query'] ?? [], $this->uncategorizedClause());
+    if ($parsed['uncategorized']) {
+      $clause = $parsed['mode'] === self::MODE_NOT
+        ? $this->categorizedClause()
+        : $this->uncategorizedClause();
+      $args['tax_query'] = $this->mergeTaxQuery($args['tax_query'] ?? [], $clause);
       return $args;
     }
 
-    if (!is_numeric($value)) {
+    if ($parsed['termIds'] === []) {
       return $args;
     }
 
     $args['tax_query'] = $this->mergeTaxQuery($args['tax_query'] ?? [], [
       'taxonomy' => $this->config->slug,
       'field' => 'term_id',
-      'terms' => [(int) $value],
+      'terms' => $parsed['termIds'],
+      'operator' => $parsed['mode'] === self::MODE_NOT ? 'NOT IN' : 'IN',
       'include_children' => true,
     ]);
 
     return $args;
+  }
+
+  /**
+   * @return array{mode: string, uncategorized: bool, termIds: list<int>, empty: bool}
+   */
+  public static function parse(string|int|null $value): array
+  {
+    $empty = [
+      'mode' => self::MODE_IN,
+      'uncategorized' => false,
+      'termIds' => [],
+      'empty' => true,
+    ];
+
+    if ($value === null) {
+      return $empty;
+    }
+
+    $raw = trim((string) $value);
+    if ($raw === '' || $raw === '0') {
+      return $empty;
+    }
+
+    $mode = self::MODE_IN;
+    if (str_starts_with($raw, self::NOT_PREFIX)) {
+      $mode = self::MODE_NOT;
+      $raw = substr($raw, strlen(self::NOT_PREFIX));
+    }
+
+    $raw = trim($raw);
+    if ($raw === '' || $raw === '0') {
+      return $empty;
+    }
+
+    if ($raw === Config::UNCATEGORIZED_QUERY) {
+      return [
+        'mode' => $mode,
+        'uncategorized' => true,
+        'termIds' => [],
+        'empty' => false,
+      ];
+    }
+
+    $termIds = [];
+    foreach (explode(',', $raw) as $part) {
+      $part = trim($part);
+      if ($part === '' || !is_numeric($part)) {
+        continue;
+      }
+      $id = (int) $part;
+      if ($id > 0) {
+        $termIds[] = $id;
+      }
+    }
+    $termIds = array_values(array_unique($termIds));
+
+    if ($termIds === []) {
+      return $empty;
+    }
+
+    return [
+      'mode' => $mode,
+      'uncategorized' => false,
+      'termIds' => $termIds,
+      'empty' => false,
+    ];
+  }
+
+  /**
+   * @param list<int> $termIds
+   */
+  public static function encode(string $mode, array $termIds = [], bool $uncategorized = false): string
+  {
+    $mode = $mode === self::MODE_NOT ? self::MODE_NOT : self::MODE_IN;
+
+    if ($uncategorized) {
+      return $mode === self::MODE_NOT
+        ? self::NOT_PREFIX . Config::UNCATEGORIZED_QUERY
+        : Config::UNCATEGORIZED_QUERY;
+    }
+
+    $termIds = array_values(array_unique(array_filter(array_map('intval', $termIds), static fn(int $id): bool => $id > 0)));
+    if ($termIds === []) {
+      return '';
+    }
+
+    $joined = implode(',', $termIds);
+    return $mode === self::MODE_NOT ? self::NOT_PREFIX . $joined : $joined;
   }
 
   /**
@@ -57,6 +161,17 @@ final class AttachmentQuery
     return [
       'taxonomy' => $this->config->slug,
       'operator' => 'NOT EXISTS',
+    ];
+  }
+
+  /**
+   * @return array<string, mixed>
+   */
+  public function categorizedClause(): array
+  {
+    return [
+      'taxonomy' => $this->config->slug,
+      'operator' => 'EXISTS',
     ];
   }
 

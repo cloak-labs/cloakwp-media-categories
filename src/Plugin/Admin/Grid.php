@@ -36,10 +36,18 @@ final class Grid
     $value = null;
 
     if (isset($_REQUEST[$this->config->slug])) {
-      $value = sanitize_text_field(wp_unslash((string) $_REQUEST[$this->config->slug]));
+      $value = wp_unslash($_REQUEST[$this->config->slug]);
     } elseif (isset($args[$this->config->slug])) {
       $value = $args[$this->config->slug];
+    } elseif (isset($_REQUEST['query'][$this->config->slug])) {
+      $value = wp_unslash($_REQUEST['query'][$this->config->slug]);
     }
+
+    if (is_array($value)) {
+      $value = implode(',', array_map('strval', $value));
+    }
+
+    $value = $value === null ? null : sanitize_text_field((string) $value);
 
     if ($value === null || $value === '') {
       return $args;
