@@ -95,6 +95,13 @@ if (!function_exists('get_taxonomy')) {
   }
 }
 
+if (!function_exists('get_terms')) {
+  function get_terms($args = [])
+  {
+    return \CloakWP\MediaCategories\Tests\WpStubs::$terms;
+  }
+}
+
 if (!function_exists('wp_get_object_terms')) {
   function wp_get_object_terms($object_id, $taxonomy, $args = [])
   {

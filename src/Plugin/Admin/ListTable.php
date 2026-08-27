@@ -42,7 +42,9 @@ final class ListTable
       return;
     }
 
-    if ($which !== 'top') {
+    // WP_Media_List_Table::views() calls extra_tablenav( 'bar' ) in the
+    // list-mode filter bar. 'top'/'bottom' tablenav exits before the action.
+    if ($which !== 'bar') {
       return;
     }
 
@@ -70,7 +72,7 @@ final class ListTable
     $allLabel = $taxonomy->labels->all_items ?? sprintf('All %s', strtolower($this->config->pluralLabel));
 
     echo '<label class="screen-reader-text" for="media-categories-filter">' . esc_html($label) . '</label>';
-    echo '<select name="' . esc_attr(self::FILTER_ARG) . '" id="media-categories-filter" class="media-categories-filter-select" data-encoded="' . esc_attr($selected) . '">';
+    echo '<select name="' . esc_attr(self::FILTER_ARG) . '" id="media-categories-filter" class="attachment-filters media-categories-filter-select" data-encoded="' . esc_attr($selected) . '">';
     printf(
       '<option value=""%s>%s</option>',
       $selectedValue === '' ? ' selected="selected"' : '',

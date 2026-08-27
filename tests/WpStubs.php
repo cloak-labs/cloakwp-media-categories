@@ -38,6 +38,9 @@ final class WpStubs
   /** @var list<array{hook: mixed, callback: mixed, priority: mixed}> */
   public static array $actions = [];
 
+  /** @var list<object> */
+  public static array $terms = [];
+
   public static function reset(): void
   {
     self::$postTypes = [];
@@ -50,5 +53,6 @@ final class WpStubs
     self::$insertedTermNames = [];
     self::$existingSlugs = [];
     self::$actions = [];
+    self::$terms = [];
   }
 }

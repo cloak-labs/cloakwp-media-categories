@@ -131,10 +131,17 @@
   line-height: 0;
 }
 
-.tablenav .media-categories-filter-wrap {
+.tablenav .media-categories-filter-wrap,
+.wp-filter .media-categories-filter-wrap {
   margin-top: 0;
   margin-right: 8px;
-  vertical-align: top;
+  vertical-align: middle;
+}
+
+.wp-filter .media-categories-filter-not-wrap {
+  margin-left: 6px;
+  margin-right: 8px;
+  vertical-align: middle;
 }
 
 .media-categories-filter-toggle {
