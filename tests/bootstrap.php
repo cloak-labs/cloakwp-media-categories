@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 $autoload = dirname(__DIR__) . '/vendor/autoload.php';
-if (!is_readable($autoload)) {
+if (is_readable($autoload)) {
+  require $autoload;
+} else {
   spl_autoload_register(static function (string $class): void {
     $prefix = 'CloakWP\\MediaCategories\\';
     if (!str_starts_with($class, $prefix)) {
@@ -15,11 +17,38 @@ if (!is_readable($autoload)) {
       require_once $path;
     }
   });
-} else {
-  require $autoload;
+}
+
+$coreSrc = dirname(__DIR__, 2) . '/cloakwp-core/src';
+if (is_dir($coreSrc)) {
+  spl_autoload_register(static function (string $class) use ($coreSrc): void {
+    $prefix = 'CloakWP\\Core\\';
+    if (!str_starts_with($class, $prefix)) {
+      return;
+    }
+    $relative = substr($class, strlen($prefix));
+    $path = $coreSrc . '/' . str_replace('\\', '/', $relative) . '.php';
+    if (is_readable($path)) {
+      require_once $path;
+    }
+  });
 }
 
 require_once __DIR__ . '/WpStubs.php';
+
+if (!function_exists('sanitize_text_field')) {
+  function sanitize_text_field($str): string
+  {
+    return trim((string) $str);
+  }
+}
+
+if (!function_exists('wp_unslash')) {
+  function wp_unslash($value)
+  {
+    return $value;
+  }
+}
 
 if (!function_exists('sanitize_key')) {
   function sanitize_key($key): string

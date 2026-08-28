@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace CloakWP\MediaCategories\Plugin\Admin;
 
+use CloakWP\Core\Media\LibraryFilter;
 use CloakWP\MediaCategories\Core\Config;
 use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
 use CloakWP\MediaCategories\Core\Support\TermTree;
-use WP_Query;
 
 /**
- * Media Library list view: filter dropdown, uncategorized query, bulk action.
+ * Media Library list view: filter dropdown HTML + bulk action.
+ * Query filtering is registered via CloakWP\Core\Media\LibraryFilter.
  */
 final class ListTable
 {
@@ -19,14 +20,11 @@ final class ListTable
 
   public function __construct(
     private readonly Config $config,
-    private readonly AttachmentQuery $attachmentQuery,
   ) {
   }
 
   public function register(): void
   {
-    add_action('restrict_manage_posts', [$this, 'renderFilter'], 10, 2);
-    add_action('pre_get_posts', [$this, 'filterQuery']);
     add_filter('bulk_actions-upload', [$this, 'registerBulkAction']);
     // upload.php applies this in the switch default, then redirects.
     add_filter('handle_bulk_actions-upload', [$this, 'handleBulkActionsFilter'], 10, 3);
@@ -111,48 +109,26 @@ final class ListTable
     );
   }
 
-  public function filterQuery(WP_Query $query): void
+  /**
+   * List view uses FILTER_ARG; grid/modal uses the taxonomy slug (WP's ajax allowlist).
+   *
+   * @param array<string, mixed> $args
+   */
+  public function resolveFilterValue(array $args): string
   {
-    if (!is_admin() || !$query->is_main_query()) {
-      return;
-    }
+    $listValue = LibraryFilter::valueFromRequest(self::FILTER_ARG, $args);
+    $ajaxValue = LibraryFilter::valueFromRequest($this->config->slug, $args);
+    $value = $listValue !== '' ? $listValue : $ajaxValue;
 
-    // get_current_screen() is often null during pre_get_posts — use $pagenow.
-    global $pagenow;
-    if ($pagenow !== 'upload.php') {
-      return;
-    }
-
-    $postType = $query->get('post_type');
-    if ($postType && $postType !== 'attachment' && !(is_array($postType) && in_array('attachment', $postType, true))) {
-      return;
-    }
-
-    $value = isset($_GET[self::FILTER_ARG])
-      ? sanitize_text_field(wp_unslash((string) $_GET[self::FILTER_ARG]))
-      : '';
-
-    // Legacy / mistaken taxonomy query_var (expects a slug, not a term ID).
-    if (($value === '' || $value === '0') && isset($_GET[$this->config->slug])) {
-      $value = sanitize_text_field(wp_unslash((string) $_GET[$this->config->slug]));
-    }
-
-    if (!empty($_GET['media_category_not']) && $value !== '' && $value !== '0' && !str_starts_with($value, AttachmentQuery::NOT_PREFIX)) {
+    if (
+      !empty($_GET['media_category_not'])
+      && $value !== ''
+      && !str_starts_with($value, AttachmentQuery::NOT_PREFIX)
+    ) {
       $value = AttachmentQuery::NOT_PREFIX . $value;
     }
 
-    if ($value === '' || $value === '0') {
-      return;
-    }
-
-    // Ensure a mistaken taxonomy query_var (slug lookup) doesn't empty the results.
-    $query->set($this->config->slug, '');
-    unset($query->query_vars[$this->config->slug]);
-
-    $vars = $this->attachmentQuery->applyToArgs(['tax_query' => $query->get('tax_query') ?: []], $value);
-    if (isset($vars['tax_query'])) {
-      $query->set('tax_query', $vars['tax_query']);
-    }
+    return $value;
   }
 
   /**

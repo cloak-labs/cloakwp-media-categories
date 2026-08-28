@@ -131,13 +131,20 @@
   line-height: 0;
 }
 
-/* Modal only: core type/date selects sit 32px down; 30px + middle
-   lines this wrap up with them. :last-of-type zeroes their right
-   margin, so restore the gap here. */
+/*
+ * Modal: core type/date selects sit 32px down (under the absolute
+ * "Filter media" heading). Match that offset so this wrap shares
+ * their row instead of wrapping onto the attachments grid.
+ */
 .media-modal-content .media-categories-filter-wrap {
-  margin-top: 30px;
-  margin-left: 2%;
-  vertical-align: middle;
+  float: left;
+  box-sizing: border-box;
+  width: calc(23% - 8px);
+  max-width: calc(23% - 8px);
+  margin-top: 32px;
+  margin-right: 2%;
+  margin-left: 0;
+  vertical-align: top;
 }
 
 .tablenav .media-categories-filter-wrap,
@@ -244,13 +251,23 @@
 
 /*
  * Media modal (ACF Image/Gallery/File, Add Media, featured image):
- * Core sizes each `.attachment-filters` at ~48% of the toolbar and clips
- * overflow at 60–72px. Type + date already fill the row, so a third
- * filter wraps out of view. Shrink them so they fit beside our dropdown.
+ * Core sizes each `.attachment-filters` at ~48% of the toolbar (72px,
+ * overflow hidden). Type + date fill that row; orientation is another
+ * select, so a fourth control wraps onto the grid. Shrink all four.
  */
 .media-modal-content .media-frame select.attachment-filters {
-  width: auto;
-  max-width: calc(32% - 8px);
+  width: calc(23% - 8px);
+  max-width: calc(23% - 8px);
+}
+
+.media-modal-content .media-frame select.attachment-filters:last-of-type {
+  margin-right: 2%;
+}
+
+.media-modal-content .media-categories-filter-toggle {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .media-modal .attachments-browser .media-toolbar {

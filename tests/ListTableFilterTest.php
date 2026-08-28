@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace CloakWP\MediaCategories\Tests;
 
 use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
 use CloakWP\MediaCategories\Plugin\Admin\ListTable;
 use PHPUnit\Framework\TestCase;
 
@@ -23,7 +22,7 @@ final class ListTableFilterTest extends TestCase
       ],
     ];
     $config = Config::defaults();
-    $this->table = new ListTable($config, new AttachmentQuery($config));
+    $this->table = new ListTable($config);
   }
 
   public function testRenderFilterOutputsInMediaLibraryBar(): void

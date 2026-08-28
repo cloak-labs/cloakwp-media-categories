@@ -16,7 +16,6 @@
 
   var taxonomy = settings.taxonomy;
   var labels = settings.labels || {};
-  var patchedBrowser = false;
   var openFilterView = null;
   var filterDocBound = false;
 
@@ -313,7 +312,6 @@
 
   var MediaCategoryFilter = null;
   var AssignCategoriesButton = null;
-  var boundAcfPopup = false;
 
   function ensureMediaViews() {
     if (MediaCategoryFilter) {
@@ -705,63 +703,24 @@
     }
   }
 
-  function bindMediaFrame(frame) {
-    if (!frame || frame._mediaCategoriesBound || typeof frame.on !== 'function') {
-      return;
-    }
-    frame._mediaCategoriesBound = true;
-    frame.on('content:activate:browse', function () {
-      var browser = null;
-      try {
-        browser = frame.content.get();
-      } catch (e) {
-        return;
-      }
-      injectCategoryFilter(browser);
-    });
-  }
+  var boundLibraryToolbar = false;
 
-  function bindAcfMediaPopups() {
-    if (boundAcfPopup) {
+  function bindLibraryToolbar() {
+    if (boundLibraryToolbar) {
+      if (window.cloakwpMediaLibrary && typeof cloakwpMediaLibrary.patch === 'function') {
+        cloakwpMediaLibrary.patch();
+      }
       return true;
     }
-    if (!window.acf || typeof acf.addAction !== 'function') {
-      return false;
-    }
-    acf.addAction('new_media_popup', function (popup) {
-      patchMediaBrowser();
-      if (popup && popup.frame) {
-        bindMediaFrame(popup.frame);
+    if (window.cloakwpMediaLibrary && typeof cloakwpMediaLibrary.onToolbar === 'function') {
+      cloakwpMediaLibrary.onToolbar(injectCategoryFilter);
+      boundLibraryToolbar = true;
+      if (typeof cloakwpMediaLibrary.patch === 'function') {
+        cloakwpMediaLibrary.patch();
       }
-    });
-    boundAcfPopup = true;
-    return true;
-  }
-
-  function patchMediaBrowser() {
-    if (!ensureMediaViews()) {
-      return false;
-    }
-    if (!wp.media.view.AttachmentsBrowser) {
-      return false;
-    }
-
-    bindAcfMediaPopups();
-
-    if (patchedBrowser) {
       return true;
     }
-
-    // Mutate the prototype in place so any cached constructor reference still picks this up.
-    var proto = wp.media.view.AttachmentsBrowser.prototype;
-    var originalCreateToolbar = proto.createToolbar;
-    proto.createToolbar = function () {
-      originalCreateToolbar.apply(this, arguments);
-      injectCategoryFilter(this);
-    };
-
-    patchedBrowser = true;
-    return true;
+    return false;
   }
 
   /* ------------------------------------------------------------------ */
@@ -1080,10 +1039,10 @@
     });
   }
 
-  // Patch as soon as media-views is available; retry on ready if needed.
-  if (!patchMediaBrowser()) {
+  // Register with the shared LibraryFilter toolbar as soon as it exists.
+  if (!bindLibraryToolbar()) {
     $(function () {
-      patchMediaBrowser();
+      bindLibraryToolbar();
     });
   }
   if (!patchAttachmentCompatSave()) {
@@ -1096,8 +1055,7 @@
     initAddNewHandlers();
     initListBulkFromQuery();
     // One more attempt after other footer scripts (media-grid, acf-input) have run.
-    patchMediaBrowser();
-    bindAcfMediaPopups();
+    bindLibraryToolbar();
     enhanceListFilter();
     patchAttachmentCompatSave();
   });

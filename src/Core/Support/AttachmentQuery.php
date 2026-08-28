@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CloakWP\MediaCategories\Core\Support;
 
+use CloakWP\Core\Media\QueryArgs;
 use CloakWP\MediaCategories\Core\Config;
 
 /**
@@ -46,7 +47,7 @@ final class AttachmentQuery
       $clause = $parsed['mode'] === self::MODE_NOT
         ? $this->categorizedClause()
         : $this->uncategorizedClause();
-      $args['tax_query'] = $this->mergeTaxQuery($args['tax_query'] ?? [], $clause);
+      $args['tax_query'] = QueryArgs::mergeTaxQuery($args['tax_query'] ?? [], $clause);
       return $args;
     }
 
@@ -54,7 +55,7 @@ final class AttachmentQuery
       return $args;
     }
 
-    $args['tax_query'] = $this->mergeTaxQuery($args['tax_query'] ?? [], [
+    $args['tax_query'] = QueryArgs::mergeTaxQuery($args['tax_query'] ?? [], [
       'taxonomy' => $this->config->slug,
       'field' => 'term_id',
       'terms' => $parsed['termIds'],
@@ -175,24 +176,4 @@ final class AttachmentQuery
     ];
   }
 
-  /**
-   * @param array<int|string, mixed> $existing
-   * @param array<string, mixed> $clause
-   * @return array<int|string, mixed>
-   */
-  private function mergeTaxQuery(array $existing, array $clause): array
-  {
-    if ($existing === []) {
-      return [$clause];
-    }
-
-    // Ensure relation is AND when combining.
-    if (!isset($existing['relation'])) {
-      $existing = array_merge(['relation' => 'AND'], array_is_list($existing) ? $existing : array_values($existing));
-    }
-
-    $existing[] = $clause;
-
-    return $existing;
-  }
 }

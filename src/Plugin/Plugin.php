@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace CloakWP\MediaCategories\Plugin;
 
+use CloakWP\Core\Media\LibraryFilter;
 use CloakWP\MediaCategories\Core\Config;
 use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
 use CloakWP\MediaCategories\Core\Support\TermAssigner;
 use CloakWP\MediaCategories\Plugin\Admin\AttachmentDetails;
-use CloakWP\MediaCategories\Plugin\Admin\Grid;
 use CloakWP\MediaCategories\Plugin\Admin\ListTable;
 use CloakWP\MediaCategories\Plugin\Rest\BulkAssignController;
 
@@ -30,8 +30,11 @@ final class Plugin
     $assets = new Assets($this->config, $this->pluginFile);
     $assets->register();
 
-    (new ListTable($this->config, $this->attachmentQuery))->register();
-    (new Grid($this->config, $this->attachmentQuery))->register();
+    $listTable = new ListTable($this->config);
+    $listTable->register();
+
+    $this->registerLibraryFilter($listTable);
+
     (new AttachmentDetails($this->config, $this->termAssigner, $assets))->register();
     (new BulkAssignController($this->config, $this->termAssigner))->register();
     (new Maintenance($this->config))->register();
@@ -60,5 +63,31 @@ final class Plugin
 
     flush_rewrite_rules(false);
     update_option($optionKey, $desired, false);
+  }
+
+  private function registerLibraryFilter(ListTable $listTable): void
+  {
+    $config = $this->config;
+    $attachmentQuery = $this->attachmentQuery;
+
+    LibraryFilter::make('media_category')
+      ->queryVar(ListTable::FILTER_ARG)
+      ->label(sprintf('Filter by %s', $config->singularLabel))
+      ->grid(LibraryFilter::GRID_CUSTOM)
+      ->priority(-74)
+      ->listRenderer(static function () use ($listTable): void {
+        $listTable->renderFilter('attachment', 'bar');
+      })
+      ->resolveValue(static function (array $args) use ($listTable): ?string {
+        $value = $listTable->resolveFilterValue($args);
+
+        return $value === '' ? null : $value;
+      })
+      ->query(static function (array $args, string $value) use ($attachmentQuery, $config): array {
+        unset($args[$config->slug], $args[ListTable::FILTER_ARG]);
+
+        return $attachmentQuery->applyToArgs($args, $value);
+      })
+      ->register();
   }
 }

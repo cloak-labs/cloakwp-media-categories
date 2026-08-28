@@ -6,6 +6,7 @@ namespace CloakWP\MediaCategories\Plugin;
 
 use CloakWP\MediaCategories\Core\Config;
 use CloakWP\MediaCategories\Core\Support\TermTree;
+use CloakWP\Core\Media\LibraryFilters;
 
 /**
  * Registers and enqueues admin JS/CSS via plugin_dir_url().
@@ -34,6 +35,8 @@ final class Assets
 
   public function registerHandles(): void
   {
+    LibraryFilters::registerAssets();
+
     $version = defined('CLOAKWP_MEDIA_CATEGORIES_VERSION')
       ? CLOAKWP_MEDIA_CATEGORIES_VERSION
       : '0.1.0';
@@ -48,7 +51,7 @@ final class Assets
       // Patch AttachmentsBrowser before wp-admin `media` creates the Manage frame on ready.
       // We intentionally do NOT depend on `media` — that would place us after its ready handler
       // registration; instead we load after media-views/media-grid and patch in our IIFE.
-      $deps = ['jquery', 'media-views', 'wp-api-fetch'];
+      $deps = ['jquery', 'media-views', 'wp-api-fetch', LibraryFilters::SCRIPT_HANDLE];
       if (wp_script_is('media-grid', 'registered') || wp_script_is('media-grid', 'enqueued')) {
         $deps[] = 'media-grid';
       }
@@ -99,6 +102,8 @@ final class Assets
 
   public function enqueue(): void
   {
+    LibraryFilters::enqueue();
+
     if (!wp_script_is(self::SCRIPT_HANDLE, 'registered')) {
       $this->registerHandles();
     }

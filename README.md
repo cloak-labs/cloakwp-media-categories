@@ -119,6 +119,8 @@ src/Plugin/    # Admin UI, REST, asset enqueue (WordPress integration)
 MediaCategories.php  # Fluent facade wiring Core + Plugin
 ```
 
+Media Library list/grid/modal filtering uses `CloakWP\Core\Media\LibraryFilter` (shared with Media Orientation). This package supplies the custom hierarchical UI and taxonomy query; the primitive owns `restrict_manage_posts`, `pre_get_posts`, `ajax_query_attachments_args`, and AttachmentsBrowser toolbar patching.
+
 ## Development
 
 ```bash

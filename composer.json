@@ -12,6 +12,7 @@
   ],
   "require": {
     "php": ">=8.2",
+    "cloakwp/core": "dev-main",
     "composer/installers": "^1.0 || ^2.2"
   },
   "require-dev": {
@@ -38,6 +39,6 @@
       "composer/installers": true
     }
   },
-  "minimum-stability": "stable",
+  "minimum-stability": "dev",
   "prefer-stable": true
 }
