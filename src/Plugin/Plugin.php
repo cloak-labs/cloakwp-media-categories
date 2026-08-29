@@ -75,6 +75,7 @@ final class Plugin
       ->label(sprintf('Filter by %s', $config->singularLabel))
       ->grid(LibraryFilter::GRID_CUSTOM)
       ->priority(-74)
+      ->modelKeys([$config->slug, ListTable::FILTER_ARG])
       ->listRenderer(static function () use ($listTable): void {
         $listTable->renderFilter('attachment', 'bar');
       })

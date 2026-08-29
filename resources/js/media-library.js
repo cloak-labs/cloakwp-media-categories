@@ -312,6 +312,52 @@
 
   var MediaCategoryFilter = null;
   var AssignCategoriesButton = null;
+  var categoryFilterViews = [];
+  var boundClearFilters = false;
+
+  function resetCategoryFilterView(view) {
+    if (!view) {
+      return;
+    }
+    view.filterMode = 'in';
+    view.selected = [];
+    if (view.options && view.options.$input && view.options.$input.length) {
+      view.options.$input.val('');
+    }
+    if (view.$el && view.$el.length && view.$('.media-categories-filter-toggle').length) {
+      view.syncPanelState();
+      view.updateToggleLabel();
+      if (typeof view.closePanel === 'function') {
+        view.closePanel();
+      }
+    }
+    if (view.live && typeof view.applyFilter === 'function') {
+      view.applyFilter();
+    }
+  }
+
+  function resetAllCategoryFilterViews() {
+    categoryFilterViews.forEach(resetCategoryFilterView);
+    $('#media-categories-filter-value').val('');
+    $('#media-categories-filter').val('').attr('data-encoded', '');
+  }
+
+  function bindClearFilters() {
+    if (boundClearFilters) {
+      return;
+    }
+    if (window.cloakwpMediaLibrary && typeof cloakwpMediaLibrary.onClear === 'function') {
+      cloakwpMediaLibrary.onClear(function () {
+        resetAllCategoryFilterViews();
+      });
+      boundClearFilters = true;
+      return;
+    }
+    $(document).on('cloakwp.mediaLibrary.clearFilters', function () {
+      resetAllCategoryFilterViews();
+    });
+    boundClearFilters = true;
+  }
 
   function ensureMediaViews() {
     if (MediaCategoryFilter) {
@@ -483,7 +529,20 @@
         if (this.options.$input && this.options.$input.length) {
           this.options.$input.val(encoded);
         }
-        if (!this.live || !this.model || typeof this.model.set !== 'function') {
+        if (!this.live || !this.model) {
+          return;
+        }
+        var listArg = settings.filterArg;
+        if (!encoded) {
+          if (typeof this.model.unset === 'function') {
+            this.model.unset(taxonomy);
+            if (listArg && listArg !== taxonomy) {
+              this.model.unset(listArg, { silent: true });
+            }
+          }
+          return;
+        }
+        if (typeof this.model.set !== 'function') {
           return;
         }
         var props = {};
@@ -684,6 +743,7 @@
     }
 
     browser.toolbar.set('MediaCategoryFilter', filterView);
+    categoryFilterViews.push(filterView);
 
     if (
       settings.assignCap &&
@@ -715,6 +775,7 @@
     if (window.cloakwpMediaLibrary && typeof cloakwpMediaLibrary.onToolbar === 'function') {
       cloakwpMediaLibrary.onToolbar(injectCategoryFilter);
       boundLibraryToolbar = true;
+      bindClearFilters();
       if (typeof cloakwpMediaLibrary.patch === 'function') {
         cloakwpMediaLibrary.patch();
       }
@@ -726,6 +787,178 @@
   /* ------------------------------------------------------------------ */
   /* Attachment sidebar: REST replace + Add New category                */
   /* ------------------------------------------------------------------ */
+
+  function escapeHtml(text) {
+    return $('<div>').text(text == null ? '' : String(text)).html();
+  }
+
+  function termDepthFromSettings(term) {
+    var depth = 0;
+    var parent = parseInt(term.parent, 10) || 0;
+    var byId = {};
+    (settings.terms || []).forEach(function (item) {
+      byId[parseInt(item.id, 10)] = item;
+    });
+    var guard = 0;
+    while (parent > 0 && byId[parent] && guard++ < 50) {
+      depth += 1;
+      parent = parseInt(byId[parent].parent, 10) || 0;
+    }
+    return depth;
+  }
+
+  function registerCreatedTerm(term) {
+    settings.terms = settings.terms || [];
+    var id = parseInt(term.id, 10);
+    var existing = settings.terms.filter(function (item) {
+      return parseInt(item.id, 10) === id;
+    })[0];
+    if (existing) {
+      return existing;
+    }
+    var row = {
+      id: id,
+      name: term.name,
+      slug: term.slug,
+      parent: parseInt(term.parent, 10) || 0,
+      count: parseInt(term.count, 10) || 0,
+    };
+    row.depth = termDepthFromSettings(row);
+    settings.terms.push(row);
+    return row;
+  }
+
+  function appendTermToChecklist($checklist, term, checked) {
+    if (!$checklist || !$checklist.length) {
+      return;
+    }
+    if ($checklist.find('input[type="checkbox"][value="' + term.id + '"]').length) {
+      return;
+    }
+    var $li = $(
+      '<li id="' +
+        taxonomy +
+        '-' +
+        term.id +
+        '">' +
+        '<label class="selectit">' +
+        '<input value="' +
+        term.id +
+        '" type="checkbox" name="tax_input[' +
+        taxonomy +
+        '][]" data-slug="' +
+        escapeHtml(term.slug || '') +
+        '"' +
+        (checked ? ' checked="checked"' : '') +
+        ' /> ' +
+        escapeHtml(term.name) +
+        '</label></li>'
+    );
+    var parentId = parseInt(term.parent, 10) || 0;
+    var $parentLi =
+      parentId > 0
+        ? $checklist
+            .find('input[type="checkbox"][value="' + parentId + '"]')
+            .closest('li')
+            .first()
+        : $();
+    if ($parentLi.length) {
+      var $kids = $parentLi.children('ul.children');
+      if (!$kids.length) {
+        $kids = $('<ul class="children"></ul>');
+        $parentLi.append($kids);
+      }
+      $kids.append($li);
+    } else {
+      $checklist.append($li);
+    }
+  }
+
+  function appendTermToParentSelect($select, term) {
+    if (!$select || !$select.length) {
+      return;
+    }
+    if ($select.find('option[value="' + term.id + '"]').length) {
+      return;
+    }
+    var depth = term.depth != null ? term.depth : termDepthFromSettings(term);
+    var pad = new Array(depth * 3 + 1).join('\u00a0');
+    var $option = $('<option></option>').val(String(term.id)).text(pad + term.name);
+    var parentId = parseInt(term.parent, 10) || 0;
+    if (parentId > 0) {
+      var $parentOpt = $select.find('option[value="' + parentId + '"]');
+      if ($parentOpt.length) {
+        $parentOpt.after($option);
+        return;
+      }
+    }
+    $select.append($option);
+  }
+
+  function syncSidebarField($field) {
+    if (!$field || !$field.length) {
+      return;
+    }
+    var $checklist = $field.find('.media-categories-checklist');
+    var $parent = $field.find('.media-categories-new-parent');
+    (settings.terms || []).forEach(function (term) {
+      appendTermToChecklist($checklist, term, false);
+      appendTermToParentSelect($parent, term);
+    });
+  }
+
+  function addTermToFilterPanels(term) {
+    $('.media-categories-filter-terms').each(function () {
+      var $box = $(this);
+      if ($box.find('.media-categories-filter-term[value="' + term.id + '"]').length) {
+        return;
+      }
+      var text = termPrefix(term.depth) + term.name + ' (' + (term.count || 0) + ')';
+      $box.append(
+        '<label class="media-categories-filter-row">' +
+          '<input type="checkbox" class="media-categories-filter-term" value="' +
+          term.id +
+          '" /> <span>' +
+          escapeHtml(text) +
+          '</span></label>'
+      );
+    });
+  }
+
+  function addTermToBulkPanel(term) {
+    if (!$bulkPanel) {
+      return;
+    }
+    var $box = $bulkPanel.find('.media-categories-bulk-terms');
+    if ($box.find('input[value="' + term.id + '"]').length) {
+      return;
+    }
+    $box.append(
+      '<label class="media-categories-bulk-term">' +
+        '<input type="checkbox" value="' +
+        term.id +
+        '" /> ' +
+        escapeHtml(termPrefix(term.depth) + term.name) +
+        '</label>'
+    );
+  }
+
+  function rememberCreatedTerm(term, $currentField) {
+    var row = registerCreatedTerm(term);
+    if ($currentField && $currentField.length) {
+      appendTermToChecklist($currentField.find('.media-categories-checklist'), row, true);
+      appendTermToParentSelect($currentField.find('.media-categories-new-parent'), row);
+    }
+    $('.media-categories-attachment-field').each(function () {
+      if ($currentField && this === $currentField.get(0)) {
+        return;
+      }
+      syncSidebarField($(this));
+    });
+    addTermToFilterPanels(row);
+    addTermToBulkPanel(row);
+    return row;
+  }
 
   function collectCheckedTermIds($field) {
     return $field
@@ -797,30 +1030,58 @@
       });
   }
 
+  function patchTwoColumnSidebarSync() {
+    var Details =
+      window.wp && wp.media && wp.media.view && wp.media.view.Attachment
+        ? wp.media.view.Attachment.Details
+        : null;
+    var TwoColumn = Details && Details.TwoColumn ? Details.TwoColumn.prototype : null;
+    if (!TwoColumn || TwoColumn._mediaCategoriesPatched) {
+      return;
+    }
+    var originalTwoColumnRender = TwoColumn.render;
+    TwoColumn.render = function () {
+      var result = originalTwoColumnRender.apply(this, arguments);
+      syncSidebarField(this.$('.media-categories-attachment-field'));
+      return result;
+    };
+    TwoColumn._mediaCategoriesPatched = true;
+  }
+
   function patchAttachmentCompatSave() {
     if (!window.wp || !wp.media || !wp.media.view || !wp.media.view.AttachmentCompat) {
       return false;
     }
-    if (wp.media.view.AttachmentCompat.prototype._mediaCategoriesPatched) {
-      return true;
+    if (!wp.media.view.AttachmentCompat.prototype._mediaCategoriesPatched) {
+      var originalSave = wp.media.view.AttachmentCompat.prototype.save;
+      wp.media.view.AttachmentCompat.prototype.save = function (event) {
+        if (
+          event &&
+          event.target &&
+          event.target.closest &&
+          event.target.closest('.media-categories-attachment-field')
+        ) {
+          // Let the document REST handler persist IDs. Do not POST to
+          // save-attachment-compat (core would treat taxonomy values as slugs).
+          event.preventDefault();
+          return;
+        }
+        return originalSave.apply(this, arguments);
+      };
+
+      // query-attachments caches compat.item per model. Next/prev re-renders
+      // that snapshot, which would omit terms created in this session.
+      var originalRender = wp.media.view.AttachmentCompat.prototype.render;
+      wp.media.view.AttachmentCompat.prototype.render = function () {
+        var result = originalRender.apply(this, arguments);
+        syncSidebarField(this.$('.media-categories-attachment-field'));
+        return result;
+      };
+
+      wp.media.view.AttachmentCompat.prototype._mediaCategoriesPatched = true;
     }
 
-    var originalSave = wp.media.view.AttachmentCompat.prototype.save;
-    wp.media.view.AttachmentCompat.prototype.save = function (event) {
-      if (
-        event &&
-        event.target &&
-        event.target.closest &&
-        event.target.closest('.media-categories-attachment-field')
-      ) {
-        // Let the document REST handler persist IDs. Do not POST to
-        // save-attachment-compat (core would treat taxonomy values as slugs).
-        event.preventDefault();
-        return;
-      }
-      return originalSave.apply(this, arguments);
-    };
-    wp.media.view.AttachmentCompat.prototype._mediaCategoriesPatched = true;
+    patchTwoColumnSidebarSync();
     return true;
   }
 
@@ -863,6 +1124,14 @@
       setAddFormVisible($wrap, $(this).attr('aria-expanded') !== 'true');
     });
 
+    $(document).on('click', '.edit-media-header .left, .edit-media-header .right', function () {
+      window.setTimeout(function () {
+        $('.media-categories-attachment-field').each(function () {
+          syncSidebarField($(this));
+        });
+      }, 0);
+    });
+
     $(document).on('click', '.media-categories-add-submit', function (e) {
       e.preventDefault();
       if (!settings.manageCap || !window.wp || !wp.apiFetch) {
@@ -895,65 +1164,7 @@
           data: data,
         })
         .then(function (term) {
-          var checklist = $field.find('.media-categories-checklist');
-          var inputName = 'tax_input[' + taxonomy + '][]';
-          var $li = $(
-            '<li id="' +
-              taxonomy +
-              '-' +
-              term.id +
-              '">' +
-              '<label class="selectit">' +
-              '<input value="' +
-              term.id +
-              '" type="checkbox" name="' +
-              inputName +
-              '" data-slug="' +
-              $('<div>').text(term.slug || '').html() +
-              '" checked="checked" /> ' +
-              $('<div>').text(term.name).html() +
-              '</label></li>'
-          );
-          var parentId = parseInt(term.parent, 10) || parent || 0;
-          var $parentLi =
-            parentId > 0
-              ? checklist
-                  .find('input[type="checkbox"][value="' + parentId + '"]')
-                  .closest('li')
-                  .first()
-              : $();
-          if ($parentLi.length) {
-            var $kids = $parentLi.children('ul.children');
-            if (!$kids.length) {
-              $kids = $('<ul class="children"></ul>');
-              $parentLi.append($kids);
-            }
-            $kids.append($li);
-          } else {
-            checklist.append($li);
-          }
-
-          settings.terms = settings.terms || [];
-          settings.terms.push({
-            id: term.id,
-            name: term.name,
-            slug: term.slug,
-            parent: term.parent || 0,
-            count: 0,
-          });
-          if ($bulkPanel) {
-            $bulkPanel
-              .find('.media-categories-bulk-terms')
-              .append(
-                '<label class="media-categories-bulk-term">' +
-                  '<input type="checkbox" value="' +
-                  term.id +
-                  '" /> ' +
-                  $('<div>').text(term.name).html() +
-                  '</label>'
-              );
-          }
-
+          rememberCreatedTerm(term, $field);
           $name.val('');
           setAddFormVisible($wrap, false);
 
@@ -1030,6 +1241,8 @@
     view.render();
 
     $select.hide().after($hidden).after(view.$el);
+    categoryFilterViews.push(view);
+    bindClearFilters();
     $('.media-categories-filter-not-wrap').hide();
     $('label[for="media-categories-filter"]').attr('for', 'media-categories-filter-toggle');
 
@@ -1056,6 +1269,7 @@
     initListBulkFromQuery();
     // One more attempt after other footer scripts (media-grid, acf-input) have run.
     bindLibraryToolbar();
+    bindClearFilters();
     enhanceListFilter();
     patchAttachmentCompatSave();
   });
