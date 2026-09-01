@@ -8,6 +8,7 @@ use CloakWP\Core\Media\LibraryFilter;
 use CloakWP\MediaCategories\Core\Config;
 use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
 use CloakWP\MediaCategories\Core\Support\TermAssigner;
+use CloakWP\MediaCategories\Core\Support\TermTree;
 use CloakWP\MediaCategories\Plugin\Admin\AttachmentDetails;
 use CloakWP\MediaCategories\Plugin\Admin\ListTable;
 use CloakWP\MediaCategories\Plugin\Rest\BulkAssignController;
@@ -76,6 +77,32 @@ final class Plugin
       ->grid(LibraryFilter::GRID_CUSTOM)
       ->priority(-74)
       ->modelKeys([$config->slug, ListTable::FILTER_ARG])
+      ->supportsExclude(true)
+      ->schemaOptions(static function () use ($config): array {
+        if (function_exists('taxonomy_exists') && !taxonomy_exists($config->slug)) {
+          return [];
+        }
+
+        $terms = get_terms([
+          'taxonomy' => $config->slug,
+          'hide_empty' => false,
+        ]);
+        if (!is_array($terms) || (function_exists('is_wp_error') && is_wp_error($terms))) {
+          return [];
+        }
+
+        $out = [];
+        foreach (TermTree::flatten($terms) as $row) {
+          $out[] = [
+            'value' => (string) $row['id'],
+            'label' => $row['name'],
+            'parent' => $row['parent'] > 0 ? (string) $row['parent'] : null,
+            'slug' => $row['slug'],
+          ];
+        }
+
+        return $out;
+      })
       ->listRenderer(static function () use ($listTable): void {
         $listTable->renderFilter('attachment', 'bar');
       })
