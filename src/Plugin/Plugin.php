@@ -71,9 +71,12 @@ final class Plugin
     $config = $this->config;
     $attachmentQuery = $this->attachmentQuery;
 
+    $labels = $config->taxonomyLabels();
+
     LibraryFilter::make('media_category')
       ->queryVar(ListTable::FILTER_ARG)
-      ->label(sprintf('Filter by %s', $config->singularLabel))
+      ->label((string) ($labels['filter_by_item'] ?? sprintf('Filter by %s', $config->singularLabel)))
+      ->allLabel((string) ($labels['all_items'] ?? sprintf('All %s', strtolower($config->pluralLabel))))
       ->grid(LibraryFilter::GRID_CUSTOM)
       ->priority(-74)
       ->modelKeys([$config->slug, ListTable::FILTER_ARG])
