@@ -43,4 +43,20 @@ final class TermTreeTest extends TestCase
     $this->assertSame(0, $flat[0]['depth']);
     $this->assertSame(9, $flat[0]['id']);
   }
+
+  public function testDecodesHtmlEntitiesInNames(): void
+  {
+    $flat = TermTree::flatten([
+      ['id' => 1, 'name' => 'Pools &amp; Spas', 'parent' => 0, 'count' => 0],
+      ['id' => 2, 'name' => 'Food & Drink', 'parent' => 0, 'count' => 0],
+    ]);
+
+    $byId = [];
+    foreach ($flat as $row) {
+      $byId[$row['id']] = $row['name'];
+    }
+
+    $this->assertSame('Pools & Spas', $byId[1]);
+    $this->assertSame('Food & Drink', $byId[2]);
+  }
 }

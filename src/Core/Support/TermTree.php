@@ -78,7 +78,7 @@ final class TermTree
     if (is_array($term)) {
       return [
         'id' => (int) ($term['id'] ?? $term['term_id'] ?? 0),
-        'name' => (string) ($term['name'] ?? ''),
+        'name' => self::decodeName((string) ($term['name'] ?? '')),
         'slug' => (string) ($term['slug'] ?? ''),
         'parent' => (int) ($term['parent'] ?? 0),
         'count' => (int) ($term['count'] ?? 0),
@@ -88,11 +88,20 @@ final class TermTree
 
     return [
       'id' => (int) ($term->term_id ?? $term->id ?? 0),
-      'name' => (string) ($term->name ?? ''),
+      'name' => self::decodeName((string) ($term->name ?? '')),
       'slug' => (string) ($term->slug ?? ''),
       'parent' => (int) ($term->parent ?? 0),
       'count' => (int) ($term->count ?? 0),
       'depth' => 0,
     ];
+  }
+
+  /**
+   * WP stores names through _wp_specialchars (`&` → `&amp;`). Flattened rows
+   * are display text: callers HTML-escape when they interpolate into markup.
+   */
+  private static function decodeName(string $name): string
+  {
+    return html_entity_decode($name, ENT_QUOTES | ENT_HTML5, 'UTF-8');
   }
 }

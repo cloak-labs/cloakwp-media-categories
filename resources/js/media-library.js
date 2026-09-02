@@ -19,6 +19,21 @@
   var openFilterView = null;
   var filterDocBound = false;
 
+  // WP persists term names via _wp_specialchars (`&` → `&amp;`). Decode once so
+  // later .text()/escapeHtml() encode for HTML instead of showing a literal entity.
+  function decodeHtmlEntities(text) {
+    if (text == null || text === '') {
+      return '';
+    }
+    return $('<textarea></textarea>').html(String(text)).val();
+  }
+
+  (settings.terms || []).forEach(function (term) {
+    if (term) {
+      term.name = decodeHtmlEntities(term.name);
+    }
+  });
+
   function termPrefix(depth) {
     var prefix = '';
     var d = parseInt(depth, 10) || 0;
@@ -818,7 +833,7 @@
     }
     var row = {
       id: id,
-      name: term.name,
+      name: decodeHtmlEntities(term.name),
       slug: term.slug,
       parent: parseInt(term.parent, 10) || 0,
       count: parseInt(term.count, 10) || 0,
