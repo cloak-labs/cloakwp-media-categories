@@ -12,6 +12,7 @@ use CloakWP\MediaCategories\Core\Support\TermTree;
 use CloakWP\MediaCategories\Plugin\Admin\AttachmentDetails;
 use CloakWP\MediaCategories\Plugin\Admin\ListTable;
 use CloakWP\MediaCategories\Plugin\Rest\BulkAssignController;
+use CloakWP\MediaCategories\Plugin\Rest\TermsController;
 
 /**
  * WordPress integration layer (hooks, admin UI, REST, assets).
@@ -38,6 +39,7 @@ final class Plugin
 
     (new AttachmentDetails($this->config, $this->termAssigner, $assets))->register();
     (new BulkAssignController($this->config, $this->termAssigner))->register();
+    (new TermsController($this->config))->register();
     (new Maintenance($this->config))->register();
 
     if ($this->config->defaultTerm !== null) {
@@ -86,16 +88,8 @@ final class Plugin
           return [];
         }
 
-        $terms = get_terms([
-          'taxonomy' => $config->slug,
-          'hide_empty' => false,
-        ]);
-        if (!is_array($terms) || (function_exists('is_wp_error') && is_wp_error($terms))) {
-          return [];
-        }
-
         $out = [];
-        foreach (TermTree::flatten($terms) as $row) {
+        foreach (TermTree::fromTaxonomy($config->slug) as $row) {
           $out[] = [
             'value' => (string) $row['id'],
             'label' => $row['name'],

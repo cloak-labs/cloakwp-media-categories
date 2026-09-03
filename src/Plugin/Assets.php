@@ -142,16 +142,7 @@ final class Assets
     $singular = $taxLabels?->singular_name ?? $this->config->singularLabel;
     $plural = $taxLabels?->name ?? $this->config->pluralLabel;
 
-    $termList = [];
-    if ($taxonomy) {
-      $terms = get_terms([
-        'taxonomy' => $this->config->slug,
-        'hide_empty' => false,
-      ]);
-      if (!is_wp_error($terms)) {
-        $termList = TermTree::flatten($terms);
-      }
-    }
+    $termList = $taxonomy ? TermTree::fromTaxonomy($this->config->slug) : [];
 
     wp_localize_script(self::SCRIPT_HANDLE, 'mediaCategoriesAdmin', [
       'taxonomy' => $this->config->slug,

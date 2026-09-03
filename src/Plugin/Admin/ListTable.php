@@ -83,22 +83,16 @@ final class ListTable
       esc_html__('Uncategorized', 'media-categories'),
     );
 
-    $terms = get_terms([
-      'taxonomy' => $this->config->slug,
-      'hide_empty' => false,
-    ]);
-    if (!is_wp_error($terms)) {
-      foreach (TermTree::flatten($terms) as $term) {
-        $optionValue = (string) $term['id'];
-        $optionLabel = TermTree::prefix($term['depth']) . $term['name'] . ' (' . $term['count'] . ')';
-        $isSelected = $selectedValue === $optionValue;
-        printf(
-          '<option value="%s"%s>%s</option>',
-          esc_attr($optionValue),
-          $isSelected ? ' selected="selected"' : '',
-          esc_html($optionLabel),
-        );
-      }
+    foreach (TermTree::fromTaxonomy($this->config->slug) as $term) {
+      $optionValue = (string) $term['id'];
+      $optionLabel = TermTree::prefix($term['depth']) . $term['name'] . ' (' . $term['count'] . ')';
+      $isSelected = $selectedValue === $optionValue;
+      printf(
+        '<option value="%s"%s>%s</option>',
+        esc_attr($optionValue),
+        $isSelected ? ' selected="selected"' : '',
+        esc_html($optionLabel),
+      );
     }
 
     echo '</select>';

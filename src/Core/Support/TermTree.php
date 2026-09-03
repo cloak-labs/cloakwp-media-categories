@@ -60,6 +60,26 @@ final class TermTree
     return $out;
   }
 
+  /**
+   * @return list<array{id: int, name: string, slug: string, parent: int, count: int, depth: int}>
+   */
+  public static function fromTaxonomy(string $taxonomy): array
+  {
+    if ($taxonomy === '') {
+      return [];
+    }
+
+    $terms = get_terms([
+      'taxonomy' => $taxonomy,
+      'hide_empty' => false,
+    ]);
+    if (!is_array($terms) || (function_exists('is_wp_error') && is_wp_error($terms))) {
+      return [];
+    }
+
+    return self::flatten($terms);
+  }
+
   public static function prefix(int $depth): string
   {
     if ($depth <= 0) {

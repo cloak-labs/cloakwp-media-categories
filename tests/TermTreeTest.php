@@ -59,4 +59,36 @@ final class TermTreeTest extends TestCase
     $this->assertSame('Pools & Spas', $byId[1]);
     $this->assertSame('Food & Drink', $byId[2]);
   }
+
+  public function testFromTaxonomyFlattensGetTerms(): void
+  {
+    WpStubs::reset();
+    WpStubs::$terms = [
+      (object) [
+        'term_id' => 1,
+        'name' => 'Alpha',
+        'slug' => 'alpha',
+        'parent' => 0,
+        'count' => 2,
+      ],
+      (object) [
+        'term_id' => 2,
+        'name' => 'Child',
+        'slug' => 'child',
+        'parent' => 1,
+        'count' => 0,
+      ],
+    ];
+
+    $flat = TermTree::fromTaxonomy('category_media');
+
+    $this->assertSame([1, 2], array_column($flat, 'id'));
+    $this->assertSame(0, $flat[0]['depth']);
+    $this->assertSame(1, $flat[1]['depth']);
+  }
+
+  public function testFromTaxonomyReturnsEmptyForBlankSlug(): void
+  {
+    $this->assertSame([], TermTree::fromTaxonomy(''));
+  }
 }
