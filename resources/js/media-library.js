@@ -117,6 +117,7 @@
 
   var $bulkPanel = null;
   var currentBulkIds = [];
+  var bulkSelectController = null;
   var bulkTermsAbort = null;
   var bulkTermsRequestId = 0;
 
@@ -302,9 +303,10 @@
     return $bulkPanel;
   }
 
-  function openBulkPanel(ids, $anchor) {
+  function openBulkPanel(ids, $anchor, controller) {
     var $panel = ensureBulkPanel();
     currentBulkIds = ids || [];
+    bulkSelectController = controller || null;
     $panel
       .find('.media-categories-bulk-panel__title')
       .text(
@@ -371,6 +373,21 @@
       $bulkPanel.find('.media-categories-bulk-status').text('');
     }
     currentBulkIds = [];
+    bulkSelectController = null;
+  }
+
+  function exitBulkSelectMode() {
+    var controller = bulkSelectController;
+    if (controller && typeof controller.trigger === 'function') {
+      controller.trigger('selection:action:done');
+    }
+    if (controller && typeof controller.isModeActive === 'function' && !controller.isModeActive('select')) {
+      return;
+    }
+    var $toggle = $('.media-toolbar-mode-select .select-mode-toggle-button');
+    if ($toggle.length) {
+      $toggle.trigger('click');
+    }
   }
 
   function selectedTermIds() {
@@ -426,9 +443,9 @@
         }
 
         var count = (result.data.updated || []).length;
-        $status.text(
-          (labels.bulkSuccess || 'Categories updated.') + ' (' + count + ')'
-        );
+        var isListBulk =
+          window.location.search.indexOf('media_categories_bulk') !== -1 ||
+          window.mediaCategoriesBulkIds;
 
         if (window.wp && wp.media && wp.media.frame) {
           var library = wp.media.frame.state().get('library');
@@ -437,19 +454,23 @@
           }
         }
 
-        setTimeout(function () {
-          closeBulkPanel();
-          if (
-            window.location.search.indexOf('media_categories_bulk') !== -1 ||
-            window.mediaCategoriesBulkIds
-          ) {
+        if (isListBulk) {
+          $status.text(
+            (labels.bulkSuccess || 'Categories updated.') + ' (' + count + ')'
+          );
+          setTimeout(function () {
+            closeBulkPanel();
             var url = new URL(window.location.href);
             url.searchParams.delete('media_categories_bulk');
             url.searchParams.delete('media_ids');
             url.searchParams.set('media_categories_updated', String(count));
             window.location.href = url.toString();
-          }
-        }, 600);
+          }, 600);
+          return;
+        }
+
+        exitBulkSelectMode();
+        closeBulkPanel();
       })
       .catch(function () {
         $status.text(labels.bulkError || 'Could not update categories.');
@@ -835,7 +856,7 @@
         var ids = selection.map(function (model) {
           return model.id;
         });
-        openBulkPanel(ids, this.$el);
+        openBulkPanel(ids, this.$el, this.controller);
       },
 
       render: function () {
