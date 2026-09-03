@@ -11,7 +11,6 @@ use CloakWP\MediaTaxonomies\Core\Support\TermAssigner;
 use CloakWP\MediaTaxonomies\Core\Support\TermTree;
 use CloakWP\MediaTaxonomies\Plugin\Admin\AttachmentDetails;
 use CloakWP\MediaTaxonomies\Plugin\Admin\ListTable;
-use CloakWP\MediaTaxonomies\Plugin\Cli\SplitHierarchyCommand;
 use CloakWP\MediaTaxonomies\Plugin\Rest\BulkAssignController;
 use CloakWP\MediaTaxonomies\Plugin\Rest\TermsController;
 
@@ -58,10 +57,6 @@ final class Plugin
     }
 
     add_action('init', [$this, 'maybeFlushRewrites'], 99);
-
-    if (defined('WP_CLI') && WP_CLI) {
-      \WP_CLI::add_command('media-taxonomies', SplitHierarchyCommand::class);
-    }
   }
 
   public function maybeFlushRewrites(): void
