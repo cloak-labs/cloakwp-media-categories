@@ -258,9 +258,66 @@
   padding: 12px 14px;
 }
 
-.media-categories-bulk-panel__title {
+.media-categories-bulk-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0 0 8px;
+}
+
+.media-categories-bulk-panel__title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
+}
+
+.media-categories-bulk-refresh {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  background: transparent;
+  min-height: 0;
+  line-height: 1;
+  color: #50575e;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: none;
+}
+
+.wp-core-ui .media-categories-bulk-refresh,
+.wp-core-ui .media-categories-bulk-refresh:hover,
+.wp-core-ui .media-categories-bulk-refresh:focus,
+.wp-core-ui .media-categories-bulk-refresh:active {
+  text-decoration: none;
+  box-shadow: none;
+}
+
+.media-categories-bulk-refresh:hover,
+.media-categories-bulk-refresh:focus {
+  color: #135e96;
+}
+
+.media-categories-bulk-refresh .dashicons {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.media-categories-bulk-refresh.is-busy .dashicons {
+  animation: media-categories-spin 0.8s linear infinite;
+}
+
+@keyframes media-categories-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .media-categories-bulk-terms {

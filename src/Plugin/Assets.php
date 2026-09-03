@@ -73,9 +73,10 @@ final class Assets
       if (wp_style_is(self::STYLE_HANDLE, 'registered')) {
         $styles = wp_styles();
         $styles->registered[self::STYLE_HANDLE]->src = $cssUrl;
+        $styles->registered[self::STYLE_HANDLE]->deps = ['dashicons'];
         $styles->registered[self::STYLE_HANDLE]->ver = $cssVersion;
       } else {
-        wp_register_style(self::STYLE_HANDLE, $cssUrl, [], $cssVersion);
+        wp_register_style(self::STYLE_HANDLE, $cssUrl, ['dashicons'], $cssVersion);
       }
     }
   }
@@ -173,8 +174,11 @@ final class Assets
         'apply' => 'Apply',
         'bulkSuccess' => 'Categories updated.',
         'bulkError' => 'Could not update categories.',
+        'refresh' => sprintf('Refresh %s', strtolower($plural)),
+        'refreshError' => 'Could not refresh categories.',
       ],
       'restUrl' => esc_url_raw(rest_url('media-categories/v1/bulk-assign')),
+      'termsUrl' => esc_url_raw(rest_url('media-categories/v1/terms')),
       'nonce' => wp_create_nonce('wp_rest'),
     ]);
 

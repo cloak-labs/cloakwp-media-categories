@@ -18,6 +18,7 @@
   var labels = settings.labels || {};
   var openFilterView = null;
   var filterDocBound = false;
+  var categoryFilterViews = [];
 
   // WP persists term names via _wp_specialchars (`&` → `&amp;`). Decode once so
   // later .text()/escapeHtml() encode for HTML instead of showing a literal entity.
@@ -116,13 +117,11 @@
 
   var $bulkPanel = null;
   var currentBulkIds = [];
+  var bulkTermsAbort = null;
+  var bulkTermsRequestId = 0;
 
-  function ensureBulkPanel() {
-    if ($bulkPanel) {
-      return $bulkPanel;
-    }
-
-    var termOptions = (settings.terms || [])
+  function bulkTermOptionsHtml() {
+    return (settings.terms || [])
       .map(function (term) {
         return (
           '<label class="media-categories-bulk-term">' +
@@ -134,16 +133,141 @@
         );
       })
       .join('');
+  }
+
+  function renderBulkTerms(checkedIds) {
+    if (!$bulkPanel) {
+      return;
+    }
+    var checked = (checkedIds || []).map(String);
+    $bulkPanel.find('.media-categories-bulk-terms').html(bulkTermOptionsHtml());
+    if (checked.length) {
+      $bulkPanel.find('.media-categories-bulk-terms input[type="checkbox"]').each(function () {
+        this.checked = checked.indexOf(String(this.value)) !== -1;
+      });
+    }
+  }
+
+  function refreshFilterTermLists() {
+    categoryFilterViews.forEach(function (view) {
+      if (!view || !view.$el || !view.$el.length) {
+        return;
+      }
+      var $box = view.$('.media-categories-filter-terms');
+      if (!$box.length) {
+        return;
+      }
+      $box.html(view.termRowsHtml());
+      if (typeof view.syncPanelState === 'function') {
+        view.syncPanelState();
+      }
+      if (typeof view.updateToggleLabel === 'function') {
+        view.updateToggleLabel();
+      }
+    });
+  }
+
+  function applyFetchedTerms(terms) {
+    settings.terms = (terms || []).map(function (term) {
+      return {
+        id: parseInt(term.id, 10),
+        name: decodeHtmlEntities(term.name),
+        slug: term.slug,
+        parent: parseInt(term.parent, 10) || 0,
+        count: parseInt(term.count, 10) || 0,
+        depth: parseInt(term.depth, 10) || 0,
+      };
+    });
+    renderBulkTerms(selectedTermIds());
+    refreshFilterTermLists();
+    $('.media-categories-attachment-field').each(function () {
+      syncSidebarField($(this));
+    });
+  }
+
+  function setBulkRefreshBusy(busy) {
+    if (!$bulkPanel) {
+      return;
+    }
+    var $btn = $bulkPanel.find('.media-categories-bulk-refresh');
+    $btn.prop('disabled', !!busy).toggleClass('is-busy', !!busy);
+    $btn.attr('aria-busy', busy ? 'true' : 'false');
+  }
+
+  function refreshBulkTerms() {
+    if (!window.wp || !wp.apiFetch) {
+      if ($bulkPanel) {
+        $bulkPanel
+          .find('.media-categories-bulk-status')
+          .text(labels.refreshError || 'Could not refresh categories.');
+      }
+      return;
+    }
+
+    if (bulkTermsAbort && typeof bulkTermsAbort.abort === 'function') {
+      bulkTermsAbort.abort();
+    }
+    bulkTermsAbort =
+      typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var requestId = ++bulkTermsRequestId;
+
+    var $status = $bulkPanel ? $bulkPanel.find('.media-categories-bulk-status') : $();
+    setBulkRefreshBusy(true);
+    if ($status.length) {
+      $status.text('');
+    }
+
+    wp.apiFetch({
+      path: '/media-categories/v1/terms',
+      signal: bulkTermsAbort ? bulkTermsAbort.signal : undefined,
+    })
+      .then(function (data) {
+        if (requestId !== bulkTermsRequestId) {
+          return;
+        }
+        applyFetchedTerms(Array.isArray(data) ? data : []);
+      })
+      .catch(function (error) {
+        if (requestId !== bulkTermsRequestId) {
+          return;
+        }
+        if (error && error.name === 'AbortError') {
+          return;
+        }
+        if ($status.length) {
+          $status.text(labels.refreshError || 'Could not refresh categories.');
+        }
+      })
+      .then(function () {
+        if (requestId !== bulkTermsRequestId) {
+          return;
+        }
+        bulkTermsAbort = null;
+        setBulkRefreshBusy(false);
+      });
+  }
+
+  function ensureBulkPanel() {
+    if ($bulkPanel) {
+      return $bulkPanel;
+    }
+
+    var refreshLabel = labels.refresh || 'Refresh categories';
 
     $bulkPanel = $(
       '<div class="media-categories-bulk-panel hidden" role="dialog" aria-label="' +
         (labels.bulkEdit || 'Edit categories') +
         '">' +
         '<div class="media-categories-bulk-panel__inner">' +
+        '<div class="media-categories-bulk-panel__header">' +
         '<p class="media-categories-bulk-panel__title"></p>' +
-        '<div class="media-categories-bulk-terms">' +
-        termOptions +
+        '<button type="button" class="media-categories-bulk-refresh" aria-label="' +
+        $('<div>').text(refreshLabel).html() +
+        '">' +
+        '<span class="dashicons dashicons-update" aria-hidden="true"></span>' +
+        '</button>' +
         '</div>' +
+        '<div class="media-categories-bulk-terms"></div>' +
         '<div class="media-categories-bulk-actions">' +
         '<button type="button" class="button button-primary media-categories-bulk-add">' +
         (labels.addToSelected || 'Add to selected') +
@@ -161,8 +285,13 @@
     );
 
     $('body').append($bulkPanel);
+    renderBulkTerms();
 
     $bulkPanel.on('click', '.media-categories-bulk-cancel', closeBulkPanel);
+    $bulkPanel.on('click', '.media-categories-bulk-refresh', function (e) {
+      e.preventDefault();
+      refreshBulkTerms();
+    });
     $bulkPanel.on('click', '.media-categories-bulk-add', function () {
       submitBulk(true);
     });
@@ -231,8 +360,15 @@
   }
 
   function closeBulkPanel() {
+    if (bulkTermsAbort && typeof bulkTermsAbort.abort === 'function') {
+      bulkTermsAbort.abort();
+      bulkTermsAbort = null;
+    }
+    bulkTermsRequestId += 1;
     if ($bulkPanel) {
       $bulkPanel.addClass('hidden');
+      setBulkRefreshBusy(false);
+      $bulkPanel.find('.media-categories-bulk-status').text('');
     }
     currentBulkIds = [];
   }
@@ -294,7 +430,6 @@
           (labels.bulkSuccess || 'Categories updated.') + ' (' + count + ')'
         );
 
-        // Refresh media grid if present.
         if (window.wp && wp.media && wp.media.frame) {
           var library = wp.media.frame.state().get('library');
           if (library && library.props) {
@@ -327,7 +462,6 @@
 
   var MediaCategoryFilter = null;
   var AssignCategoriesButton = null;
-  var categoryFilterViews = [];
   var boundClearFilters = false;
 
   function resetCategoryFilterView(view) {
