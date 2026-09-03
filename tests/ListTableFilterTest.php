@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Tests;
+namespace CloakWP\MediaTaxonomies\Tests;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Plugin\Admin\ListTable;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Plugin\Admin\ListTable;
 use PHPUnit\Framework\TestCase;
 
 final class ListTableFilterTest extends TestCase
@@ -21,25 +21,27 @@ final class ListTableFilterTest extends TestCase
         'all_items' => 'All media categories',
       ],
     ];
-    $config = Config::defaults();
-    $this->table = new ListTable($config);
+    $this->table = new ListTable(Config::defaults());
   }
 
-  public function testRenderFilterOutputsInMediaLibraryBar(): void
+  public function testRenderFilterOutputsPrefixedListArg(): void
   {
     ob_start();
-    $this->table->renderFilter('attachment', 'bar');
+    $this->table->renderFilter(Config::defaults()->taxonomies[0]);
     $html = (string) ob_get_clean();
 
-    $this->assertStringContainsString('id="media-categories-filter"', $html);
-    $this->assertStringContainsString('name="media_category"', $html);
+    $this->assertStringContainsString('id="media-taxonomies-filter-category_media"', $html);
+    $this->assertStringContainsString('name="filter_category_media"', $html);
+    $this->assertStringContainsString('data-taxonomy="category_media"', $html);
+    $this->assertStringContainsString('media-taxonomies-filter-select', $html);
   }
 
-  public function testRenderFilterSkipsTopAndBottomTablenav(): void
+  public function testRenderFilterSkipsUnknownTaxonomy(): void
   {
+    WpStubs::$taxonomies = [];
+
     ob_start();
-    $this->table->renderFilter('attachment', 'top');
-    $this->table->renderFilter('attachment', 'bottom');
+    $this->table->renderFilter(Config::defaults()->taxonomies[0]);
     $html = (string) ob_get_clean();
 
     $this->assertSame('', $html);

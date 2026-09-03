@@ -1,4 +1,4 @@
-/* Media Categories — minimal admin styles (core-like) */
+/* Media Taxonomies — minimal admin styles (core-like) */
 
 .media-categories-checklist-wrap {
   box-sizing: border-box;
@@ -318,6 +318,15 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+.media-categories-bulk-heading {
+  margin: 10px 0 4px;
+  font-weight: 600;
+}
+
+.media-categories-bulk-heading:first-child {
+  margin-top: 0;
 }
 
 .media-categories-bulk-terms {

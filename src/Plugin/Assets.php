@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Plugin;
+namespace CloakWP\MediaTaxonomies\Plugin;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\TermTree;
 use CloakWP\Core\Media\LibraryFilters;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\TermTree;
 
 /**
  * Registers and enqueues admin JS/CSS via plugin_dir_url().
  */
 final class Assets
 {
-  public const SCRIPT_HANDLE = 'media-categories-admin';
-  public const STYLE_HANDLE = 'media-categories-admin';
+  public const SCRIPT_HANDLE = 'media-taxonomies-admin';
+  public const STYLE_HANDLE = 'media-taxonomies-admin';
 
   private bool $localized = false;
 
@@ -29,7 +29,6 @@ final class Assets
     add_action('admin_enqueue_scripts', [$this, 'registerHandles'], 1);
     add_action('admin_enqueue_scripts', [$this, 'enqueueOnUploadScreen'], 20);
     add_action('wp_enqueue_media', [$this, 'enqueueForMedia'], 20);
-    // ACF Image/Gallery/File fields on options pages, terms, users, etc.
     add_action('acf/input/admin_enqueue_scripts', [$this, 'enqueueForAcf'], 20);
   }
 
@@ -37,8 +36,8 @@ final class Assets
   {
     LibraryFilters::registerAssets();
 
-    $version = defined('CLOAKWP_MEDIA_CATEGORIES_VERSION')
-      ? CLOAKWP_MEDIA_CATEGORIES_VERSION
+    $version = defined('CLOAKWP_MEDIA_TAXONOMIES_VERSION')
+      ? CLOAKWP_MEDIA_TAXONOMIES_VERSION
       : '0.1.0';
 
     $jsPath = $this->path('resources/js/media-library.js');
@@ -48,9 +47,6 @@ final class Assets
       $jsVersion = $version . '.' . (string) filemtime($jsPath);
       $jsUrl = $this->url('resources/js/media-library.js');
 
-      // Patch AttachmentsBrowser before wp-admin `media` creates the Manage frame on ready.
-      // We intentionally do NOT depend on `media` — that would place us after its ready handler
-      // registration; instead we load after media-views/media-grid and patch in our IIFE.
       $deps = ['jquery', 'media-views', 'wp-api-fetch', LibraryFilters::SCRIPT_HANDLE];
       if (wp_script_is('media-grid', 'registered') || wp_script_is('media-grid', 'enqueued')) {
         $deps[] = 'media-grid';
@@ -81,18 +77,11 @@ final class Assets
     }
   }
 
-  /**
-   * Enqueue whenever wp_enqueue_media runs (grid library + editor / ACF modal).
-   */
   public function enqueueForMedia(): void
   {
     $this->enqueue();
   }
 
-  /**
-   * ACF fields can appear on screens that never hit upload.php / post.php.
-   * Ensure media-views is registered, then enqueue our modal filter script.
-   */
   public function enqueueForAcf(): void
   {
     if (function_exists('wp_enqueue_media')) {
@@ -118,16 +107,12 @@ final class Assets
     $this->localize();
   }
 
-  /**
-   * Enqueue on upload.php (list + grid), post-new.php, and attachment edit screens.
-   */
   public function enqueueOnUploadScreen(string $hookSuffix): void
   {
     if (!in_array($hookSuffix, ['upload.php', 'post.php', 'post-new.php', 'media-upload.php', 'attachment'], true)) {
       return;
     }
 
-    // Re-register so media-grid can be added to deps when it was registered in upload.php.
     $this->registerHandles();
     $this->enqueue();
   }
@@ -138,47 +123,56 @@ final class Assets
       return;
     }
 
-    $taxonomy = get_taxonomy($this->config->slug);
-    $taxLabels = ($taxonomy && isset($taxonomy->labels)) ? $taxonomy->labels : null;
-    $singular = $taxLabels?->singular_name ?? $this->config->singularLabel;
-    $plural = $taxLabels?->name ?? $this->config->pluralLabel;
+    $taxonomies = [];
+    foreach ($this->config->taxonomies as $taxonomy) {
+      $wpTax = get_taxonomy($taxonomy->slug);
+      $taxLabels = ($wpTax && isset($wpTax->labels)) ? $wpTax->labels : null;
+      $singular = $taxLabels?->singular_name ?? $taxonomy->singularLabel;
+      $plural = $taxLabels?->name ?? $taxonomy->pluralLabel;
 
-    $termList = $taxonomy ? TermTree::fromTaxonomy($this->config->slug) : [];
+      $taxonomies[] = [
+        'slug' => $taxonomy->slug,
+        'restBase' => $taxonomy->restBase,
+        'filterArg' => $taxonomy->listFilterArg(),
+        'hierarchical' => $taxonomy->hierarchical,
+        'terms' => $wpTax ? TermTree::fromTaxonomy($taxonomy->slug) : [],
+        'labels' => [
+          'singular' => $singular,
+          'plural' => $plural,
+          'all' => $taxLabels?->all_items ?? sprintf('All %s', strtolower($plural)),
+          'filterBy' => $taxLabels?->filter_by_item ?? sprintf('Filter by %s', $singular),
+          'uncategorized' => 'Uncategorized',
+          'categorized' => 'Categorized',
+          'include' => 'In',
+          'exclude' => 'Not in',
+          'selectedCount' => '%d selected',
+          'bulkEdit' => sprintf('Edit %s', strtolower($plural)),
+          'addNew' => $taxLabels?->add_new_item ?? sprintf('Add New %s', $singular),
+          'newName' => $taxLabels?->new_item_name ?? sprintf('New %s Name', $singular),
+          'parent' => $taxLabels?->parent_item ?? sprintf('Parent %s', $singular),
+          'none' => '— None —',
+        ],
+      ];
+    }
 
-    wp_localize_script(self::SCRIPT_HANDLE, 'mediaCategoriesAdmin', [
-      'taxonomy' => $this->config->slug,
-      'restBase' => $this->config->restBase,
-      'filterArg' => Admin\ListTable::FILTER_ARG,
+    wp_localize_script(self::SCRIPT_HANDLE, 'mediaTaxonomiesAdmin', [
+      'taxonomies' => $taxonomies,
       'uncategorized' => Config::UNCATEGORIZED_QUERY,
       'manageCap' => current_user_can(Config::MANAGE_CAP),
       'assignCap' => current_user_can(Config::ASSIGN_CAP),
-      'terms' => $termList,
       'labels' => [
-        'singular' => $singular,
-        'plural' => $plural,
-        'all' => $taxLabels?->all_items ?? sprintf('All %s', strtolower($plural)),
-        'filterBy' => $taxLabels?->filter_by_item ?? sprintf('Filter by %s', $singular),
-        'uncategorized' => 'Uncategorized',
-        'categorized' => 'Categorized',
-        'include' => 'In',
-        'exclude' => 'Not in',
-        'selectedCount' => '%d selected',
-        'bulkEdit' => sprintf('Edit %s', strtolower($plural)),
         'addToSelected' => 'Add to selected',
         'removeFromSelected' => 'Remove from selected',
-        'addNew' => $taxLabels?->add_new_item ?? sprintf('Add New %s', $singular),
-        'newName' => $taxLabels?->new_item_name ?? sprintf('New %s Name', $singular),
-        'parent' => $taxLabels?->parent_item ?? sprintf('Parent %s', $singular),
-        'none' => '— None —',
         'cancel' => 'Cancel',
         'apply' => 'Apply',
-        'bulkSuccess' => 'Categories updated.',
-        'bulkError' => 'Could not update categories.',
-        'refresh' => sprintf('Refresh %s', strtolower($plural)),
-        'refreshError' => 'Could not refresh categories.',
+        'bulkEdit' => 'Edit media taxonomies',
+        'bulkSuccess' => 'Taxonomies updated.',
+        'bulkError' => 'Could not update taxonomies.',
+        'refresh' => 'Refresh terms',
+        'refreshError' => 'Could not refresh terms.',
       ],
-      'restUrl' => esc_url_raw(rest_url('media-categories/v1/bulk-assign')),
-      'termsUrl' => esc_url_raw(rest_url('media-categories/v1/terms')),
+      'restUrl' => esc_url_raw(rest_url('media-taxonomies/v1/bulk-assign')),
+      'termsUrl' => esc_url_raw(rest_url('media-taxonomies/v1/terms')),
       'nonce' => wp_create_nonce('wp_rest'),
     ]);
 
@@ -190,10 +184,8 @@ final class Assets
     $relative = ltrim($relative, '/');
     $base = plugins_url('', $this->pluginFile);
 
-    // Symlink safety net: plugins_url() can emit /app/plugins/var/www/... when
-    // the package realpath sits outside wp-content.
     if (defined('WPMU_PLUGIN_URL') && (str_contains($base, '/var/www/') || str_contains($base, '/plugins/var/'))) {
-      $base = trailingslashit(WPMU_PLUGIN_URL) . 'media-categories';
+      $base = trailingslashit(WPMU_PLUGIN_URL) . 'media-taxonomies';
     }
 
     return trailingslashit($base) . $relative;
@@ -201,12 +193,10 @@ final class Assets
 
   private function path(string $relative): string
   {
-    // Read from the real package dir (symlink target) so filemtime/is_readable work.
-    $dir = defined('CLOAKWP_MEDIA_CATEGORIES_DIR')
-      ? CLOAKWP_MEDIA_CATEGORIES_DIR
+    $dir = defined('CLOAKWP_MEDIA_TAXONOMIES_DIR')
+      ? CLOAKWP_MEDIA_TAXONOMIES_DIR
       : dirname($this->pluginFile);
 
-    // Prefer realpath for filesystem ops when the public dir is a symlink.
     $real = realpath($dir);
     if ($real !== false) {
       $dir = $real;

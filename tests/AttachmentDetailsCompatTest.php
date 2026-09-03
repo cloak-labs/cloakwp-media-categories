@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Tests;
+namespace CloakWP\MediaTaxonomies\Tests;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\TermAssigner;
-use CloakWP\MediaCategories\Plugin\Admin\AttachmentDetails;
-use CloakWP\MediaCategories\Plugin\Assets;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\TermAssigner;
+use CloakWP\MediaTaxonomies\Plugin\Admin\AttachmentDetails;
+use CloakWP\MediaTaxonomies\Plugin\Assets;
 use PHPUnit\Framework\TestCase;
 use WP_Post;
 
@@ -41,10 +41,11 @@ final class AttachmentDetailsCompatTest extends TestCase
     ];
 
     $config = Config::defaults();
+    $taxonomy = $config->taxonomies[0];
     $this->details = new AttachmentDetails(
       $config,
-      new TermAssigner($config),
-      new Assets($config, '/tmp/media-categories.php'),
+      [$taxonomy->slug => new TermAssigner($taxonomy)],
+      new Assets($config, '/tmp/media-taxonomies.php'),
     );
   }
 
@@ -56,6 +57,7 @@ final class AttachmentDetailsCompatTest extends TestCase
     $this->assertNotSame('', $html);
     $this->assertStringContainsString('media-categories-checklist-wrap', $html);
     $this->assertStringContainsString('data-attachment-id="585"', $html);
+    $this->assertStringContainsString('data-taxonomy="category_media"', $html);
     $this->assertStringNotContainsString(
       'name="attachments[585][category_media]"',
       $html,

@@ -2,22 +2,19 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Plugin\Admin;
+namespace CloakWP\MediaTaxonomies\Plugin\Admin;
 
 use CloakWP\Core\Media\LibraryFilter;
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
-use CloakWP\MediaCategories\Core\Support\TermTree;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\AttachmentQuery;
+use CloakWP\MediaTaxonomies\Core\Support\TermTree;
+use CloakWP\MediaTaxonomies\Core\TaxonomyConfig;
 
 /**
  * Media Library list view: filter dropdown HTML + bulk action.
- * Query filtering is registered via CloakWP\Core\Media\LibraryFilter.
  */
 final class ListTable
 {
-  /** Admin list filter query arg — must NOT match the taxonomy query_var. */
-  public const FILTER_ARG = 'media_category';
-
   public function __construct(
     private readonly Config $config,
   ) {
@@ -26,33 +23,22 @@ final class ListTable
   public function register(): void
   {
     add_filter('bulk_actions-upload', [$this, 'registerBulkAction']);
-    // upload.php applies this in the switch default, then redirects.
     add_filter('handle_bulk_actions-upload', [$this, 'handleBulkActionsFilter'], 10, 3);
-    // Belt-and-suspenders: also catch on load (before upload.php's own handler).
     add_action('load-upload.php', [$this, 'handleBulkActionOnLoad']);
     add_action('admin_footer-upload.php', [$this, 'renderBulkPanelBoot']);
     add_action('admin_notices', [$this, 'bulkAdminNotice']);
   }
 
-  public function renderFilter(string $postType, string $which): void
+  public function renderFilter(TaxonomyConfig $taxonomy): void
   {
-    if ($postType !== 'attachment') {
+    $wpTax = get_taxonomy($taxonomy->slug);
+    if (!$wpTax) {
       return;
     }
 
-    // WP_Media_List_Table::views() calls extra_tablenav( 'bar' ) in the
-    // list-mode filter bar. 'top'/'bottom' tablenav exits before the action.
-    if ($which !== 'bar') {
-      return;
-    }
-
-    $taxonomy = get_taxonomy($this->config->slug);
-    if (!$taxonomy) {
-      return;
-    }
-
-    $selected = isset($_GET[self::FILTER_ARG])
-      ? sanitize_text_field(wp_unslash((string) $_GET[self::FILTER_ARG]))
+    $filterArg = $taxonomy->listFilterArg();
+    $selected = isset($_GET[$filterArg])
+      ? sanitize_text_field(wp_unslash((string) $_GET[$filterArg]))
       : '';
 
     $parsed = AttachmentQuery::parse($selected);
@@ -66,11 +52,13 @@ final class ListTable
       $selectedValue = implode(',', $parsed['termIds']);
     }
 
-    $label = $taxonomy->labels->filter_by_item ?? sprintf('Filter by %s', $this->config->singularLabel);
-    $allLabel = $taxonomy->labels->all_items ?? sprintf('All %s', strtolower($this->config->pluralLabel));
+    $label = $wpTax->labels->filter_by_item ?? sprintf('Filter by %s', $taxonomy->singularLabel);
+    $allLabel = $wpTax->labels->all_items ?? sprintf('All %s', strtolower($taxonomy->pluralLabel));
+    $selectId = 'media-taxonomies-filter-' . $taxonomy->slug;
+    $notId = 'media-taxonomies-filter-not-' . $taxonomy->slug;
 
-    echo '<label class="screen-reader-text" for="media-categories-filter">' . esc_html($label) . '</label>';
-    echo '<select name="' . esc_attr(self::FILTER_ARG) . '" id="media-categories-filter" class="attachment-filters media-categories-filter-select" data-encoded="' . esc_attr($selected) . '">';
+    echo '<label class="screen-reader-text" for="' . esc_attr($selectId) . '">' . esc_html($label) . '</label>';
+    echo '<select name="' . esc_attr($filterArg) . '" id="' . esc_attr($selectId) . '" class="attachment-filters media-categories-filter-select media-taxonomies-filter-select" data-taxonomy="' . esc_attr($taxonomy->slug) . '" data-encoded="' . esc_attr($selected) . '">';
     printf(
       '<option value=""%s>%s</option>',
       $selectedValue === '' ? ' selected="selected"' : '',
@@ -80,10 +68,10 @@ final class ListTable
       '<option value="%s"%s>%s</option>',
       esc_attr(Config::UNCATEGORIZED_QUERY),
       $selectedValue === Config::UNCATEGORIZED_QUERY ? ' selected="selected"' : '',
-      esc_html__('Uncategorized', 'media-categories'),
+      esc_html__('Uncategorized', 'media-taxonomies'),
     );
 
-    foreach (TermTree::fromTaxonomy($this->config->slug) as $term) {
+    foreach (TermTree::fromTaxonomy($taxonomy->slug) as $term) {
       $optionValue = (string) $term['id'];
       $optionLabel = TermTree::prefix($term['depth']) . $term['name'] . ' (' . $term['count'] . ')';
       $isSelected = $selectedValue === $optionValue;
@@ -97,25 +85,26 @@ final class ListTable
 
     echo '</select>';
     printf(
-      '<label class="media-categories-filter-not-wrap"><input type="checkbox" name="media_category_not" id="media-categories-filter-not" value="1"%s /> %s</label>',
+      '<label class="media-categories-filter-not-wrap"><input type="checkbox" name="%s" id="%s" value="1"%s /> %s</label>',
+      esc_attr($filterArg . '_not'),
+      esc_attr($notId),
       $notChecked ? ' checked="checked"' : '',
-      esc_html__('Not in', 'media-categories'),
+      esc_html__('Not in', 'media-taxonomies'),
     );
   }
 
   /**
-   * List view uses FILTER_ARG; grid/modal uses the taxonomy slug (WP's ajax allowlist).
-   *
    * @param array<string, mixed> $args
    */
-  public function resolveFilterValue(array $args): string
+  public function resolveFilterValue(TaxonomyConfig $taxonomy, array $args): string
   {
-    $listValue = LibraryFilter::valueFromRequest(self::FILTER_ARG, $args);
-    $ajaxValue = LibraryFilter::valueFromRequest($this->config->slug, $args);
+    $listValue = LibraryFilter::valueFromRequest($taxonomy->listFilterArg(), $args);
+    $ajaxValue = LibraryFilter::valueFromRequest($taxonomy->slug, $args);
     $value = $listValue !== '' ? $listValue : $ajaxValue;
 
+    $notKey = $taxonomy->listFilterArg() . '_not';
     if (
-      !empty($_GET['media_category_not'])
+      !empty($_GET[$notKey])
       && $value !== ''
       && !str_starts_with($value, AttachmentQuery::NOT_PREFIX)
     ) {
@@ -135,10 +124,7 @@ final class ListTable
       return $actions;
     }
 
-    $actions['edit_media_categories'] = sprintf(
-      'Edit %s…',
-      strtolower($this->config->pluralLabel),
-    );
+    $actions['edit_media_taxonomies'] = 'Edit media taxonomies…';
 
     return $actions;
   }
@@ -148,7 +134,7 @@ final class ListTable
    */
   public function handleBulkActionsFilter(string $location, string $doaction, array $postIds): string
   {
-    if ($doaction !== 'edit_media_categories') {
+    if ($doaction !== 'edit_media_taxonomies') {
       return $location;
     }
 
@@ -160,16 +146,13 @@ final class ListTable
     return add_query_arg(
       [
         'mode' => 'list',
-        'media_categories_bulk' => 1,
+        'media_taxonomies_bulk' => 1,
         'media_ids' => implode(',', $postIds),
       ],
       admin_url('upload.php'),
     );
   }
 
-  /**
-   * Process list-view bulk action early (load-upload.php runs before upload.php body).
-   */
   public function handleBulkActionOnLoad(): void
   {
     $action = isset($_REQUEST['action']) && $_REQUEST['action'] !== '-1'
@@ -182,11 +165,10 @@ final class ListTable
         : '';
     }
 
-    if ($action !== 'edit_media_categories') {
+    if ($action !== 'edit_media_taxonomies') {
       return;
     }
 
-    // Avoid dying on the follow-up GET after we already redirected.
     if (!isset($_REQUEST['_wpnonce'])) {
       return;
     }
@@ -210,13 +192,9 @@ final class ListTable
     exit;
   }
 
-  /**
-   * Boot the bulk panel from PHP when redirected back with selected IDs.
-   * Avoids relying solely on JS reading query args (and works if wp.media isn't loaded yet).
-   */
   public function renderBulkPanelBoot(): void
   {
-    if (!isset($_GET['media_categories_bulk']) || (string) $_GET['media_categories_bulk'] !== '1') {
+    if (!isset($_GET['media_taxonomies_bulk']) || (string) $_GET['media_taxonomies_bulk'] !== '1') {
       return;
     }
 
@@ -233,18 +211,18 @@ final class ListTable
     }
 
     printf(
-      '<script>window.mediaCategoriesBulkIds = %s;</script>',
+      '<script>window.mediaTaxonomiesBulkIds = %s;</script>',
       wp_json_encode($ids),
     );
   }
 
   public function bulkAdminNotice(): void
   {
-    if (!isset($_GET['media_categories_updated'])) {
+    if (!isset($_GET['media_taxonomies_updated'])) {
       return;
     }
 
-    $count = (int) $_GET['media_categories_updated'];
+    $count = (int) $_GET['media_taxonomies_updated'];
     if ($count <= 0) {
       return;
     }
@@ -256,7 +234,7 @@ final class ListTable
           '%d media item updated.',
           '%d media items updated.',
           $count,
-          'media-categories',
+          'media-taxonomies',
         ),
         $count,
       )),

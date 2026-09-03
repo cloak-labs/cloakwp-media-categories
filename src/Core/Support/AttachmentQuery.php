@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Core\Support;
+namespace CloakWP\MediaTaxonomies\Core\Support;
 
 use CloakWP\Core\Media\QueryArgs;
-use CloakWP\MediaCategories\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\TaxonomyConfig;
 
 /**
  * Builds tax_query fragments for media library filtering.
@@ -26,13 +27,11 @@ final class AttachmentQuery
   public const NOT_PREFIX = 'not:';
 
   public function __construct(
-    private readonly Config $config,
+    private readonly TaxonomyConfig $taxonomy,
   ) {
   }
 
   /**
-   * Apply a taxonomy filter value to a WP_Query / ajax args array.
-   *
    * @param array<string, mixed> $args
    * @return array<string, mixed>
    */
@@ -56,7 +55,7 @@ final class AttachmentQuery
     }
 
     $args['tax_query'] = QueryArgs::mergeTaxQuery($args['tax_query'] ?? [], [
-      'taxonomy' => $this->config->slug,
+      'taxonomy' => $this->taxonomy->slug,
       'field' => 'term_id',
       'terms' => $parsed['termIds'],
       'operator' => $parsed['mode'] === self::MODE_NOT ? 'NOT IN' : 'IN',
@@ -160,7 +159,7 @@ final class AttachmentQuery
   public function uncategorizedClause(): array
   {
     return [
-      'taxonomy' => $this->config->slug,
+      'taxonomy' => $this->taxonomy->slug,
       'operator' => 'NOT EXISTS',
     ];
   }
@@ -171,9 +170,8 @@ final class AttachmentQuery
   public function categorizedClause(): array
   {
     return [
-      'taxonomy' => $this->config->slug,
+      'taxonomy' => $this->taxonomy->slug,
       'operator' => 'EXISTS',
     ];
   }
-
 }

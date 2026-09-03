@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Plugin\Admin;
+namespace CloakWP\MediaTaxonomies\Plugin\Admin;
 
 use Walker_Category_Checklist;
 use WP_Term;

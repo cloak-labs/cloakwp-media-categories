@@ -2,21 +2,25 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Plugin\Admin;
+namespace CloakWP\MediaTaxonomies\Plugin\Admin;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\TermAssigner;
-use CloakWP\MediaCategories\Plugin\Assets;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\TermAssigner;
+use CloakWP\MediaTaxonomies\Core\TaxonomyConfig;
+use CloakWP\MediaTaxonomies\Plugin\Assets;
 use WP_Post;
 
 /**
- * Attachment sidebar / modal: category checklist + add-new term UI.
+ * Attachment sidebar / modal: taxonomy checklists + add-new term UI.
  */
 final class AttachmentDetails
 {
+  /**
+   * @param array<string, TermAssigner> $termAssigners
+   */
   public function __construct(
     private readonly Config $config,
-    private readonly TermAssigner $termAssigner,
+    private readonly array $termAssigners,
     private readonly Assets $assets,
   ) {
   }
@@ -38,57 +42,53 @@ final class AttachmentDetails
       return $fields;
     }
 
-    $taxonomy = get_taxonomy($this->config->slug);
-    if (!$taxonomy) {
-      return $fields;
+    foreach ($this->config->taxonomies as $taxonomy) {
+      $wpTax = get_taxonomy($taxonomy->slug);
+      if (!$wpTax) {
+        continue;
+      }
+
+      unset($fields[$taxonomy->slug]);
+
+      $termIds = wp_get_object_terms($post->ID, $taxonomy->slug, ['fields' => 'ids']);
+      if (is_wp_error($termIds)) {
+        $termIds = [];
+      }
+      $termIds = array_values(array_map('intval', $termIds));
+
+      ob_start();
+      printf(
+        '<div class="media-categories-attachment-field" data-taxonomy="%s" data-attachment-id="%d">',
+        esc_attr($taxonomy->slug),
+        (int) $post->ID,
+      );
+      echo '<input type="hidden" name="media_taxonomies_fields[' . esc_attr($taxonomy->slug) . ']" value="1" />';
+      echo '<div class="media-categories-checklist-wrap">';
+      echo '<ul class="media-categories-checklist categorychecklist">';
+      wp_terms_checklist($post->ID, [
+        'taxonomy' => $taxonomy->slug,
+        'checked_ontop' => false,
+        'selected_cats' => $termIds,
+        'walker' => class_exists(\Walker_Category_Checklist::class) ? new ChecklistWalker() : null,
+      ]);
+      echo '</ul>';
+      echo '</div>';
+
+      if (current_user_can(Config::MANAGE_CAP)) {
+        $this->renderAddNewForm($taxonomy, $wpTax);
+      }
+
+      echo '</div>';
+      $html = (string) ob_get_clean();
+
+      $fields[$taxonomy->slug] = [
+        'label' => $wpTax->labels->name ?? $taxonomy->pluralLabel,
+        'input' => 'html',
+        'html' => $html,
+        'show_in_edit' => false,
+        'show_in_modal' => true,
+      ];
     }
-
-    // Remove any default taxonomy field WP/plugin may have added for this slug.
-    unset($fields[$this->config->slug]);
-
-    $termIds = wp_get_object_terms($post->ID, $this->config->slug, ['fields' => 'ids']);
-    if (is_wp_error($termIds)) {
-      $termIds = [];
-    }
-    $termIds = array_values(array_map('intval', $termIds));
-
-    ob_start();
-    printf(
-      '<div class="media-categories-attachment-field" data-taxonomy="%s" data-attachment-id="%d">',
-      esc_attr($this->config->slug),
-      (int) $post->ID,
-    );
-    echo '<input type="hidden" name="media_categories_fields[' . esc_attr($this->config->slug) . ']" value="1" />';
-    /*
-     * Do not output attachments[ID][{taxonomy}]. Core save-attachment-compat treats
-     * that key as slugs and will clobber REST/ID-based saves (or insert terms named "4").
-     */
-    echo '<div class="media-categories-checklist-wrap">';
-    echo '<ul class="media-categories-checklist categorychecklist">';
-    wp_terms_checklist($post->ID, [
-      'taxonomy' => $this->config->slug,
-      'checked_ontop' => false,
-      'selected_cats' => $termIds,
-      'walker' => class_exists(\Walker_Category_Checklist::class) ? new ChecklistWalker() : null,
-    ]);
-    echo '</ul>';
-    echo '</div>';
-
-    if (current_user_can(Config::MANAGE_CAP)) {
-      $this->renderAddNewForm($taxonomy);
-    }
-
-    echo '</div>';
-    $html = (string) ob_get_clean();
-
-    $fields[$this->config->slug] = [
-      'label' => $taxonomy->labels->name ?? $this->config->pluralLabel,
-      'input' => 'html',
-      'html' => $html,
-      // Dedicated post.php edit screen already has the core taxonomy metabox.
-      'show_in_edit' => false,
-      'show_in_modal' => true,
-    ];
 
     return $fields;
   }
@@ -109,22 +109,29 @@ final class AttachmentDetails
       return $attachment;
     }
 
-    $slug = $this->config->slug;
-    if (!isset($request['tax_input'][$slug]) || !is_array($request['tax_input'][$slug])) {
-      return $attachment;
-    }
+    foreach ($this->config->taxonomies as $taxonomy) {
+      $slug = $taxonomy->slug;
+      if (!isset($request['tax_input'][$slug]) || !is_array($request['tax_input'][$slug])) {
+        continue;
+      }
 
-    $terms = array_values(array_filter(array_map('intval', $request['tax_input'][$slug])));
-    $this->termAssigner->set($id, $terms);
+      $assigner = $this->termAssigners[$slug] ?? null;
+      if ($assigner === null) {
+        continue;
+      }
+
+      $terms = array_values(array_filter(array_map('intval', $request['tax_input'][$slug])));
+      $assigner->set($id, $terms);
+    }
 
     return $attachment;
   }
 
-  private function renderAddNewForm(object $taxonomy): void
+  private function renderAddNewForm(TaxonomyConfig $taxonomy, object $wpTax): void
   {
-    $singular = $taxonomy->labels->singular_name ?? $this->config->singularLabel;
-    $addLabel = $taxonomy->labels->add_new_item ?? sprintf('Add New %s', $singular);
-    $cancelLabel = __('Cancel', 'media-categories');
+    $singular = $wpTax->labels->singular_name ?? $taxonomy->singularLabel;
+    $addLabel = $wpTax->labels->add_new_item ?? sprintf('Add New %s', $singular);
+    $cancelLabel = __('Cancel', 'media-taxonomies');
     ?>
     <div class="media-categories-add-new">
       <button
@@ -138,15 +145,15 @@ final class AttachmentDetails
       </button>
       <div class="media-categories-add-form hidden">
         <label class="media-categories-add-label">
-          <span><?php echo esc_html__('Name', 'media-categories'); ?></span>
+          <span><?php echo esc_html__('Name', 'media-taxonomies'); ?></span>
           <input type="text" class="media-categories-new-name" />
         </label>
-        <?php if ($this->config->hierarchical) : ?>
+        <?php if ($taxonomy->hierarchical) : ?>
           <label class="media-categories-add-label">
-            <span><?php echo esc_html__('Parent', 'media-categories'); ?></span>
+            <span><?php echo esc_html__('Parent', 'media-taxonomies'); ?></span>
             <?php
             wp_dropdown_categories([
-              'taxonomy' => $this->config->slug,
+              'taxonomy' => $taxonomy->slug,
               'name' => '',
               'id' => '',
               'class' => 'media-categories-new-parent',
@@ -160,7 +167,7 @@ final class AttachmentDetails
           </label>
         <?php endif; ?>
         <button type="button" class="button media-categories-add-submit">
-          <?php echo esc_html__('Add', 'media-categories'); ?>
+          <?php echo esc_html__('Add', 'media-taxonomies'); ?>
         </button>
       </div>
     </div>

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Tests;
+namespace CloakWP\MediaTaxonomies\Tests;
 
-use CloakWP\MediaCategories\Core\Support\LegacyImport;
-use CloakWP\MediaCategories\Core\Taxonomy\Registrar;
+use CloakWP\MediaTaxonomies\Core\Support\LegacyImport;
+use CloakWP\MediaTaxonomies\Core\Taxonomy\Registrar;
 use PHPUnit\Framework\TestCase;
 
 final class LegacyImportTest extends TestCase

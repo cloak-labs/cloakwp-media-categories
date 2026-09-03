@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Tests;
+namespace CloakWP\MediaTaxonomies\Tests;
 
 /**
  * Shared mutable stubs for WordPress functions used in unit tests.

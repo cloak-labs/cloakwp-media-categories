@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Tests;
+namespace CloakWP\MediaTaxonomies\Tests;
 
-use CloakWP\MediaCategories\Core\Support\TermTree;
+use CloakWP\MediaTaxonomies\Core\Support\TermTree;
 use PHPUnit\Framework\TestCase;
 
 final class TermTreeTest extends TestCase

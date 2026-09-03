@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Plugin\Rest;
+namespace CloakWP\MediaTaxonomies\Plugin\Rest;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\TermTree;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\TermTree;
+use WP_REST_Request;
 use WP_REST_Response;
 
 /**
- * REST endpoint that returns the hierarchical media-category checklist.
+ * REST endpoint that returns flattened term trees for registered media taxonomies.
  */
 final class TermsController
 {
@@ -25,7 +26,7 @@ final class TermsController
 
   public function registerRoutes(): void
   {
-    register_rest_route('media-categories/v1', '/terms', [
+    register_rest_route('media-taxonomies/v1', '/terms', [
       'methods' => 'GET',
       'callback' => [$this, 'handle'],
       'permission_callback' => [$this, 'canView'],
@@ -37,8 +38,21 @@ final class TermsController
     return current_user_can(Config::ASSIGN_CAP);
   }
 
-  public function handle(): WP_REST_Response
+  public function handle(WP_REST_Request $request): WP_REST_Response
   {
-    return new WP_REST_Response(TermTree::fromTaxonomy($this->config->slug), 200);
+    $only = sanitize_key((string) $request->get_param('taxonomy'));
+    $payload = [];
+
+    foreach ($this->config->taxonomies as $taxonomy) {
+      if ($only !== '' && $taxonomy->slug !== $only) {
+        continue;
+      }
+      $payload[] = [
+        'slug' => $taxonomy->slug,
+        'terms' => TermTree::fromTaxonomy($taxonomy->slug),
+      ];
+    }
+
+    return new WP_REST_Response($payload, 200);
   }
 }

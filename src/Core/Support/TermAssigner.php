@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Core\Support;
+namespace CloakWP\MediaTaxonomies\Core\Support;
 
-use CloakWP\MediaCategories\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\TaxonomyConfig;
 use WP_Error;
 
 /**
@@ -13,7 +14,7 @@ use WP_Error;
 final class TermAssigner
 {
   public function __construct(
-    private readonly Config $config,
+    private readonly TaxonomyConfig $taxonomy,
   ) {
   }
 
@@ -23,7 +24,7 @@ final class TermAssigner
    */
   public function add(int $attachmentId, array $termIds): array|WP_Error
   {
-    return wp_set_object_terms($attachmentId, $this->normalizeTermIds($termIds), $this->config->slug, true);
+    return wp_set_object_terms($attachmentId, $this->normalizeTermIds($termIds), $this->taxonomy->slug, true);
   }
 
   /**
@@ -32,18 +33,16 @@ final class TermAssigner
    */
   public function remove(int $attachmentId, array $termIds): bool|WP_Error
   {
-    return wp_remove_object_terms($attachmentId, $this->normalizeTermIds($termIds), $this->config->slug);
+    return wp_remove_object_terms($attachmentId, $this->normalizeTermIds($termIds), $this->taxonomy->slug);
   }
 
   /**
-   * Replace all terms on an attachment. Empty $termIds clears them.
-   *
    * @param list<int|string> $termIds
    * @return array<string, mixed>|WP_Error
    */
   public function set(int $attachmentId, array $termIds): array|WP_Error
   {
-    return wp_set_object_terms($attachmentId, $this->normalizeTermIds($termIds), $this->config->slug, false);
+    return wp_set_object_terms($attachmentId, $this->normalizeTermIds($termIds), $this->taxonomy->slug, false);
   }
 
   /**
@@ -104,8 +103,6 @@ final class TermAssigner
   }
 
   /**
-   * Replace all terms on each attachment (empty $termIds clears them).
-   *
    * @param list<int> $attachmentIds
    * @param list<int|string> $termIds
    * @return array{updated: list<int>, skipped: list<int>, errors: list<array{id: int, message: string}>}
@@ -149,19 +146,16 @@ final class TermAssigner
     ];
   }
 
-  /**
-   * Ensure a default term exists and assign it to a newly uploaded attachment.
-   */
   public function assignDefaultIfConfigured(int $attachmentId): void
   {
-    $slug = $this->config->defaultTerm;
+    $slug = $this->taxonomy->defaultTerm;
     if ($slug === null || $slug === '') {
       return;
     }
 
-    $term = get_term_by('slug', $slug, $this->config->slug);
+    $term = get_term_by('slug', $slug, $this->taxonomy->slug);
     if (!$term) {
-      $created = wp_insert_term($slug, $this->config->slug, ['slug' => $slug]);
+      $created = wp_insert_term($slug, $this->taxonomy->slug, ['slug' => $slug]);
       if (is_wp_error($created)) {
         return;
       }

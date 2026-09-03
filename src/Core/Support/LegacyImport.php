@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Core\Support;
+namespace CloakWP\MediaTaxonomies\Core\Support;
 
 /**
  * Detects WP Media Category Management (MCM) taxonomies to copy from.

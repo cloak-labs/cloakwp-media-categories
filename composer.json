@@ -1,6 +1,6 @@
 {
-  "name": "cloakwp/media-categories",
-  "description": "Core-like media categories for WordPress — PHP-configured, no settings UI.",
+  "name": "cloakwp/media-taxonomies",
+  "description": "Core-like media taxonomies for WordPress — PHP-configured, no settings UI.",
   "license": "LGPL-3.0-only",
   "type": "wordpress-muplugin",
   "authors": [
@@ -10,6 +10,9 @@
       "homepage": "https://github.com/kaelansmith"
     }
   ],
+  "replace": {
+    "cloakwp/media-categories": "self.version"
+  },
   "require": {
     "php": ">=8.2",
     "cloakwp/core": "dev-main",
@@ -20,12 +23,12 @@
   },
   "autoload": {
     "psr-4": {
-      "CloakWP\\MediaCategories\\": "src/"
+      "CloakWP\\MediaTaxonomies\\": "src/"
     }
   },
   "autoload-dev": {
     "psr-4": {
-      "CloakWP\\MediaCategories\\Tests\\": "tests/"
+      "CloakWP\\MediaTaxonomies\\Tests\\": "tests/"
     }
   },
   "scripts": {

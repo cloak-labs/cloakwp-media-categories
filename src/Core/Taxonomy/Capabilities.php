@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Core\Taxonomy;
+namespace CloakWP\MediaTaxonomies\Core\Taxonomy;
 
-use CloakWP\MediaCategories\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Config;
 use WP_Roles;
 
 /**
@@ -22,10 +22,6 @@ final class Capabilities
     $this->sync();
   }
 
-  /**
-   * Ensure configured roles have the correct caps.
-   * Does not strip caps from other roles (safe for custom role managers).
-   */
   public function sync(): void
   {
     $roles = wp_roles();

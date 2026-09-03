@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Tests;
+namespace CloakWP\MediaTaxonomies\Tests;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Plugin\Assets;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Plugin\Assets;
 use PHPUnit\Framework\TestCase;
 
 final class AssetsEnqueueTest extends TestCase
@@ -17,7 +17,7 @@ final class AssetsEnqueueTest extends TestCase
 
   public function testRegisterHooksAcfInputAndMediaEnqueue(): void
   {
-    $assets = new Assets(Config::defaults(), '/tmp/media-categories.php');
+    $assets = new Assets(Config::defaults(), '/tmp/media-taxonomies.php');
     $assets->register();
 
     $hooks = array_column(WpStubs::$actions, 'hook');

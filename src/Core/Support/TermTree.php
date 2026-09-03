@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Core\Support;
+namespace CloakWP\MediaTaxonomies\Core\Support;
 
 /**
  * Flatten a taxonomy term list into parent-then-children order.

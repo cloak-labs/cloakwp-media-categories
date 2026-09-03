@@ -2,22 +2,25 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Plugin\Rest;
+namespace CloakWP\MediaTaxonomies\Plugin\Rest;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\TermAssigner;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\TermAssigner;
 use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 
 /**
- * REST endpoint for bulk add/remove of media categories.
+ * REST endpoint for bulk add/remove of media taxonomy terms.
  */
 final class BulkAssignController
 {
+  /**
+   * @param array<string, TermAssigner> $termAssigners
+   */
   public function __construct(
     private readonly Config $config,
-    private readonly TermAssigner $termAssigner,
+    private readonly array $termAssigners,
   ) {
   }
 
@@ -28,7 +31,7 @@ final class BulkAssignController
 
   public function registerRoutes(): void
   {
-    register_rest_route('media-categories/v1', '/bulk-assign', [
+    register_rest_route('media-taxonomies/v1', '/bulk-assign', [
       'methods' => 'POST',
       'callback' => [$this, 'handle'],
       'permission_callback' => [$this, 'canAssign'],
@@ -37,6 +40,10 @@ final class BulkAssignController
           'required' => true,
           'type' => 'array',
           'items' => ['type' => 'integer'],
+        ],
+        'taxonomy' => [
+          'required' => true,
+          'type' => 'string',
         ],
         'term_ids' => [
           'required' => true,
@@ -64,6 +71,17 @@ final class BulkAssignController
 
   public function handle(WP_REST_Request $request): WP_REST_Response|WP_Error
   {
+    $slug = sanitize_key((string) $request->get_param('taxonomy'));
+    $taxonomy = $this->config->taxonomy($slug);
+    $assigner = $this->termAssigners[$slug] ?? null;
+    if ($taxonomy === null || $assigner === null) {
+      return new WP_Error(
+        'media_taxonomies_invalid_taxonomy',
+        sprintf('Unknown media taxonomy: %s', $slug),
+        ['status' => 400],
+      );
+    }
+
     $attachmentIds = array_map('intval', (array) $request->get_param('attachment_ids'));
     $termIds = array_map('intval', (array) $request->get_param('term_ids'));
     $append = (bool) $request->get_param('append');
@@ -71,27 +89,26 @@ final class BulkAssignController
 
     if ($append && !$replace && $termIds === []) {
       return new WP_Error(
-        'media_categories_empty_terms',
-        'Select at least one category to add.',
+        'media_taxonomies_empty_terms',
+        sprintf('Select at least one %s to add.', strtolower($taxonomy->singularLabel)),
         ['status' => 400],
       );
     }
 
-    // Validate terms belong to our taxonomy when provided.
     foreach ($termIds as $termId) {
-      $term = get_term($termId, $this->config->slug);
+      $term = get_term($termId, $taxonomy->slug);
       if (!$term || is_wp_error($term)) {
         return new WP_Error(
-          'media_categories_invalid_term',
-          sprintf('Invalid media category term: %d', $termId),
+          'media_taxonomies_invalid_term',
+          sprintf('Invalid %s term: %d', strtolower($taxonomy->singularLabel), $termId),
           ['status' => 400],
         );
       }
     }
 
     $result = $replace
-      ? $this->termAssigner->bulkReplace($attachmentIds, $termIds)
-      : $this->termAssigner->bulkAssign($attachmentIds, $termIds, $append);
+      ? $assigner->bulkReplace($attachmentIds, $termIds)
+      : $assigner->bulkAssign($attachmentIds, $termIds, $append);
 
     return new WP_REST_Response($result, 200);
   }

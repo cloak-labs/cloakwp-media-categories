@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Tests;
+namespace CloakWP\MediaTaxonomies\Tests;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\AttachmentQuery;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\AttachmentQuery;
+use CloakWP\MediaTaxonomies\Core\TaxonomyConfig;
 use PHPUnit\Framework\TestCase;
 
 final class AttachmentQueryTest extends TestCase
@@ -14,7 +15,7 @@ final class AttachmentQueryTest extends TestCase
 
   protected function setUp(): void
   {
-    $this->query = new AttachmentQuery(Config::defaults());
+    $this->query = new AttachmentQuery(TaxonomyConfig::mediaCategories());
   }
 
   public function testEmptyValueLeavesArgsUntouched(): void
@@ -37,6 +38,17 @@ final class AttachmentQueryTest extends TestCase
         'include_children' => true,
       ],
     ], $args['tax_query']);
+  }
+
+  public function testUsesConfiguredTaxonomySlug(): void
+  {
+    $query = new AttachmentQuery(
+      TaxonomyConfig::fromSlug('landscape_type')->withLabels('Landscape Type', 'Landscape Types'),
+    );
+    $args = $query->applyToArgs([], 7);
+
+    $this->assertSame('landscape_type', $args['tax_query'][0]['taxonomy']);
+    $this->assertSame([7], $args['tax_query'][0]['terms']);
   }
 
   public function testUncategorizedUsesNotExists(): void

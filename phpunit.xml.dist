@@ -5,7 +5,7 @@
          colors="true"
          cacheDirectory=".phpunit.cache">
     <testsuites>
-        <testsuite name="MediaCategories">
+        <testsuite name="MediaTaxonomies">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

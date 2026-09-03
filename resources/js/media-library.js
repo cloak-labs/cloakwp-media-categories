@@ -1,24 +1,39 @@
 /**
- * Media Categories — admin media library enhancements.
+ * Media Taxonomies — admin media library enhancements.
  *
- * - Grid / modal taxonomy filter
- * - Bulk-select "Edit categories" button + panel
+ * - Grid / modal taxonomy filters (one per registered taxonomy)
+ * - Bulk-select "Edit taxonomies" button + panel
  * - Attachment sidebar "Add New" term
  * - List-view bulk assign panel
  */
 (function (window, $) {
   'use strict';
 
-  var settings = window.mediaCategoriesAdmin || null;
+  var settings = window.mediaTaxonomiesAdmin || null;
   if (!settings) {
     return;
   }
 
-  var taxonomy = settings.taxonomy;
+  var taxonomies = settings.taxonomies || [];
+  var uncategorized = settings.uncategorized || 'uncategorized';
   var labels = settings.labels || {};
   var openFilterView = null;
   var filterDocBound = false;
   var categoryFilterViews = [];
+
+  function taxBySlug(slug) {
+    slug = String(slug || '');
+    for (var i = 0; i < taxonomies.length; i++) {
+      if (taxonomies[i] && taxonomies[i].slug === slug) {
+        return taxonomies[i];
+      }
+    }
+    return null;
+  }
+
+  function taxLabels(tax) {
+    return (tax && tax.labels) || {};
+  }
 
   // WP persists term names via _wp_specialchars (`&` → `&amp;`). Decode once so
   // later .text()/escapeHtml() encode for HTML instead of showing a literal entity.
@@ -29,10 +44,12 @@
     return $('<textarea></textarea>').html(String(text)).val();
   }
 
-  (settings.terms || []).forEach(function (term) {
-    if (term) {
-      term.name = decodeHtmlEntities(term.name);
-    }
+  taxonomies.forEach(function (tax) {
+    (tax.terms || []).forEach(function (term) {
+      if (term) {
+        term.name = decodeHtmlEntities(term.name);
+      }
+    });
   });
 
   function termPrefix(depth) {
@@ -49,8 +66,8 @@
     if (!selected.length) {
       return '';
     }
-    if (selected.indexOf(settings.uncategorized) !== -1) {
-      return mode === 'not' ? 'not:' + settings.uncategorized : settings.uncategorized;
+    if (selected.indexOf(uncategorized) !== -1) {
+      return mode === 'not' ? 'not:' + uncategorized : uncategorized;
     }
     var ids = selected
       .map(function (id) {
@@ -76,8 +93,8 @@
     if (!raw || raw === '0') {
       return { mode: mode, selected: [] };
     }
-    if (raw === settings.uncategorized) {
-      return { mode: mode, selected: [settings.uncategorized] };
+    if (raw === uncategorized) {
+      return { mode: mode, selected: [uncategorized] };
     }
     var selected = raw
       .split(',')
@@ -122,16 +139,27 @@
   var bulkTermsRequestId = 0;
 
   function bulkTermOptionsHtml() {
-    return (settings.terms || [])
-      .map(function (term) {
-        return (
-          '<label class="media-categories-bulk-term">' +
-          '<input type="checkbox" value="' +
-          term.id +
-          '" /> ' +
-          $('<div>').text(termPrefix(term.depth) + term.name).html() +
-          '</label>'
-        );
+    return taxonomies
+      .map(function (tax) {
+        var heading =
+          '<p class="media-categories-bulk-heading">' +
+          $('<div>').text(taxLabels(tax).plural || tax.slug).html() +
+          '</p>';
+        var rows = (tax.terms || [])
+          .map(function (term) {
+            return (
+              '<label class="media-categories-bulk-term">' +
+              '<input type="checkbox" value="' +
+              term.id +
+              '" data-taxonomy="' +
+              tax.slug +
+              '" /> ' +
+              $('<div>').text(termPrefix(term.depth) + term.name).html() +
+              '</label>'
+            );
+          })
+          .join('');
+        return heading + rows;
       })
       .join('');
   }
@@ -168,16 +196,22 @@
     });
   }
 
-  function applyFetchedTerms(terms) {
-    settings.terms = (terms || []).map(function (term) {
-      return {
-        id: parseInt(term.id, 10),
-        name: decodeHtmlEntities(term.name),
-        slug: term.slug,
-        parent: parseInt(term.parent, 10) || 0,
-        count: parseInt(term.count, 10) || 0,
-        depth: parseInt(term.depth, 10) || 0,
-      };
+  function applyFetchedTerms(groups) {
+    (groups || []).forEach(function (group) {
+      var tax = taxBySlug(group.slug);
+      if (!tax) {
+        return;
+      }
+      tax.terms = (group.terms || []).map(function (term) {
+        return {
+          id: parseInt(term.id, 10),
+          name: decodeHtmlEntities(term.name),
+          slug: term.slug,
+          parent: parseInt(term.parent, 10) || 0,
+          count: parseInt(term.count, 10) || 0,
+          depth: parseInt(term.depth, 10) || 0,
+        };
+      });
     });
     renderBulkTerms(selectedTermIds());
     refreshFilterTermLists();
@@ -200,7 +234,7 @@
       if ($bulkPanel) {
         $bulkPanel
           .find('.media-categories-bulk-status')
-          .text(labels.refreshError || 'Could not refresh categories.');
+          .text(labels.refreshError || 'Could not refresh terms.');
       }
       return;
     }
@@ -219,7 +253,7 @@
     }
 
     wp.apiFetch({
-      path: '/media-categories/v1/terms',
+      path: '/media-taxonomies/v1/terms',
       signal: bulkTermsAbort ? bulkTermsAbort.signal : undefined,
     })
       .then(function (data) {
@@ -236,7 +270,7 @@
           return;
         }
         if ($status.length) {
-          $status.text(labels.refreshError || 'Could not refresh categories.');
+          $status.text(labels.refreshError || 'Could not refresh terms.');
         }
       })
       .then(function () {
@@ -253,11 +287,11 @@
       return $bulkPanel;
     }
 
-    var refreshLabel = labels.refresh || 'Refresh categories';
+    var refreshLabel = labels.refresh || 'Refresh terms';
 
     $bulkPanel = $(
       '<div class="media-categories-bulk-panel hidden" role="dialog" aria-label="' +
-        (labels.bulkEdit || 'Edit categories') +
+        (labels.bulkEdit || 'Edit media taxonomies') +
         '">' +
         '<div class="media-categories-bulk-panel__inner">' +
         '<div class="media-categories-bulk-panel__header">' +
@@ -310,7 +344,7 @@
     $panel
       .find('.media-categories-bulk-panel__title')
       .text(
-        (labels.bulkEdit || 'Edit categories') +
+        (labels.bulkEdit || 'Edit media taxonomies') +
           ' (' +
           currentBulkIds.length +
           ')'
@@ -402,50 +436,83 @@
       .get();
   }
 
+  function selectedTermsByTaxonomy() {
+    var grouped = {};
+    if (!$bulkPanel) {
+      return grouped;
+    }
+    $bulkPanel.find('.media-categories-bulk-terms input:checked').each(function () {
+      var slug = this.getAttribute('data-taxonomy') || '';
+      var id = parseInt(this.value, 10);
+      if (!slug || id <= 0) {
+        return;
+      }
+      if (!grouped[slug]) {
+        grouped[slug] = [];
+      }
+      grouped[slug].push(id);
+    });
+    return grouped;
+  }
+
   function submitBulk(append) {
-    var termIds = selectedTermIds();
-    if (append && !termIds.length) {
+    var grouped = selectedTermsByTaxonomy();
+    var slugs = Object.keys(grouped);
+    if (!slugs.length) {
       $bulkPanel
         .find('.media-categories-bulk-status')
-        .text('Select at least one category.');
+        .text('Select at least one term.');
       return;
     }
 
     var $status = $bulkPanel.find('.media-categories-bulk-status');
     $status.text('Updating…');
 
-    fetch(settings.restUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-WP-Nonce': settings.nonce,
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify({
-        attachment_ids: currentBulkIds,
-        term_ids: termIds,
-        append: append,
-      }),
-    })
-      .then(function (res) {
-        return res.json().then(function (data) {
-          return { ok: res.ok, data: data };
+    Promise.all(
+      slugs.map(function (slug) {
+        return fetch(settings.restUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-WP-Nonce': settings.nonce,
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            attachment_ids: currentBulkIds,
+            taxonomy: slug,
+            term_ids: grouped[slug],
+            append: append,
+          }),
+        }).then(function (res) {
+          return res.json().then(function (data) {
+            return { ok: res.ok, data: data };
+          });
         });
       })
-      .then(function (result) {
-        if (!result.ok) {
+    )
+      .then(function (results) {
+        var failed = results.filter(function (result) {
+          return !result.ok;
+        })[0];
+        if (failed) {
           $status.text(
-            (result.data && result.data.message) ||
+            (failed.data && failed.data.message) ||
               labels.bulkError ||
-              'Could not update categories.'
+              'Could not update taxonomies.'
           );
           return;
         }
 
-        var count = (result.data.updated || []).length;
+        var updated = {};
+        results.forEach(function (result) {
+          (result.data.updated || []).forEach(function (id) {
+            updated[id] = true;
+          });
+        });
+        var count = Object.keys(updated).length;
         var isListBulk =
-          window.location.search.indexOf('media_categories_bulk') !== -1 ||
-          window.mediaCategoriesBulkIds;
+          window.location.search.indexOf('media_taxonomies_bulk') !== -1 ||
+          window.mediaTaxonomiesBulkIds;
 
         if (window.wp && wp.media && wp.media.frame) {
           var library = wp.media.frame.state().get('library');
@@ -456,14 +523,14 @@
 
         if (isListBulk) {
           $status.text(
-            (labels.bulkSuccess || 'Categories updated.') + ' (' + count + ')'
+            (labels.bulkSuccess || 'Taxonomies updated.') + ' (' + count + ')'
           );
           setTimeout(function () {
             closeBulkPanel();
             var url = new URL(window.location.href);
-            url.searchParams.delete('media_categories_bulk');
+            url.searchParams.delete('media_taxonomies_bulk');
             url.searchParams.delete('media_ids');
-            url.searchParams.set('media_categories_updated', String(count));
+            url.searchParams.set('media_taxonomies_updated', String(count));
             window.location.href = url.toString();
           }, 600);
           return;
@@ -473,7 +540,7 @@
         closeBulkPanel();
       })
       .catch(function () {
-        $status.text(labels.bulkError || 'Could not update categories.');
+        $status.text(labels.bulkError || 'Could not update taxonomies.');
       });
   }
 
@@ -508,8 +575,8 @@
 
   function resetAllCategoryFilterViews() {
     categoryFilterViews.forEach(resetCategoryFilterView);
-    $('#media-categories-filter-value').val('');
-    $('#media-categories-filter').val('').attr('data-encoded', '');
+    $('.media-taxonomies-filter-select').val('').attr('data-encoded', '');
+    $('[id^="media-taxonomies-filter-value-"]').val('');
   }
 
   function bindClearFilters() {
@@ -549,15 +616,20 @@
       },
 
       initialize: function () {
+        this.tax = this.options.tax || taxonomies[0] || { slug: '', terms: [], labels: {}, filterArg: '' };
+        this.taxSlug = this.tax.slug;
+        this.taxLabels = taxLabels(this.tax);
+        this.listArg = this.tax.filterArg || 'filter_' + this.taxSlug;
         this.live = this.options.live !== false;
         this.panelOpen = false;
         this.filterMode = 'in';
         this.selected = [];
         this.toggleId =
-          this.options.toggleId || 'media-categories-attachment-filter-' + this.cid;
+          this.options.toggleId ||
+          'media-categories-attachment-filter-' + this.taxSlug + '-' + this.cid;
         this.syncFromModel();
-        if (this.model && typeof this.model.on === 'function') {
-          this.model.on('change:' + taxonomy, this.syncFromModel, this);
+        if (this.model && typeof this.model.on === 'function' && this.taxSlug) {
+          this.model.on('change:' + this.taxSlug, this.syncFromModel, this);
         }
       },
 
@@ -567,7 +639,7 @@
           encoded = this.options.encoded;
           this.options.encoded = null;
         } else if (this.model && typeof this.model.get === 'function') {
-          encoded = this.model.get(taxonomy) || '';
+          encoded = this.model.get(this.taxSlug) || '';
         }
         var parsed = parseFilterValue(encoded);
         this.filterMode = parsed.mode;
@@ -579,7 +651,7 @@
       },
 
       termRowsHtml: function () {
-        return (settings.terms || [])
+        return ((this.tax && this.tax.terms) || [])
           .map(function (term) {
             var text = termPrefix(term.depth) + term.name + ' (' + term.count + ')';
             return (
@@ -598,7 +670,9 @@
       render: function () {
         var panelId = 'media-categories-filter-panel-' + this.cid;
         var toggleId = this.toggleId;
+        var filterBy = this.taxLabels.filterBy || labels.filterBy || 'Filter by Media Category';
 
+        this.$el.attr('data-taxonomy', this.taxSlug);
         this.$el.html(
           '<button type="button" class="media-categories-filter-toggle" id="' +
             toggleId +
@@ -609,29 +683,31 @@
             '<div class="media-categories-filter-panel hidden" id="' +
             panelId +
             '" role="dialog" aria-label="' +
-            $('<div>').text(labels.filterBy || 'Filter by Media Category').html() +
+            $('<div>').text(filterBy).html() +
             '">' +
             '<div class="media-categories-filter-mode" role="group" aria-label="' +
-            $('<div>').text(labels.filterBy || 'Filter by Media Category').html() +
+            $('<div>').text(filterBy).html() +
             '">' +
             '<button type="button" class="button media-categories-filter-mode-btn" data-mode="in">' +
-            $('<div>').text(labels.include || 'In').html() +
+            $('<div>').text(this.taxLabels.include || labels.include || 'In').html() +
             '</button>' +
             '<button type="button" class="button media-categories-filter-mode-btn" data-mode="not">' +
-            $('<div>').text(labels.exclude || 'Not in').html() +
+            $('<div>').text(this.taxLabels.exclude || labels.exclude || 'Not in').html() +
             '</button>' +
             '</div>' +
             '<button type="button" class="button-link media-categories-filter-clear">' +
-            $('<div>').text(labels.all || 'All').html() +
+            $('<div>').text(this.taxLabels.all || labels.all || 'All').html() +
             '</button>' +
             '<label class="media-categories-filter-row">' +
             '<input type="checkbox" class="media-categories-filter-term" value="' +
-            settings.uncategorized +
+            uncategorized +
             '" /> ' +
             '<span>' +
-            $('<div>').text(labels.uncategorized || 'Uncategorized').html() +
+            $('<div>').text(this.taxLabels.uncategorized || 'Uncategorized').html() +
             '</span></label>' +
-            '<div class="media-categories-filter-terms">' +
+            '<div class="media-categories-filter-terms" data-taxonomy="' +
+            this.taxSlug +
+            '">' +
             this.termRowsHtml() +
             '</div></div>'
         );
@@ -655,29 +731,30 @@
       },
 
       updateToggleLabel: function () {
-        var text = labels.all || 'All';
+        var text = this.taxLabels.all || labels.all || 'All';
         var selected = this.selected;
-        if (selected.length === 1 && selected[0] === settings.uncategorized) {
+        var terms = (this.tax && this.tax.terms) || [];
+        if (selected.length === 1 && selected[0] === uncategorized) {
           text =
             this.filterMode === 'not'
-              ? labels.categorized || 'Categorized'
-              : labels.uncategorized || 'Uncategorized';
+              ? this.taxLabels.categorized || 'Categorized'
+              : this.taxLabels.uncategorized || 'Uncategorized';
         } else if (selected.length === 1) {
-          var term = (settings.terms || []).filter(function (item) {
+          var term = terms.filter(function (item) {
             return item.id === selected[0];
           })[0];
           text = term ? term.name : String(selected[0]);
           if (this.filterMode === 'not') {
-            text = (labels.exclude || 'Not in') + ' ' + text;
+            text = (this.taxLabels.exclude || 'Not in') + ' ' + text;
           }
         } else if (selected.length > 1) {
-          var countLabel = (labels.selectedCount || '%d selected').replace(
+          var countLabel = (this.taxLabels.selectedCount || labels.selectedCount || '%d selected').replace(
             '%d',
             String(selected.length)
           );
           text =
             this.filterMode === 'not'
-              ? (labels.exclude || 'Not in') + ' · ' + countLabel
+              ? (this.taxLabels.exclude || 'Not in') + ' · ' + countLabel
               : countLabel;
         }
         this.$('.media-categories-filter-toggle').text(text);
@@ -686,9 +763,7 @@
       collectSelected: function () {
         return this.$('.media-categories-filter-term:checked')
           .map(function () {
-            return this.value === settings.uncategorized
-              ? settings.uncategorized
-              : parseInt(this.value, 10);
+            return this.value === uncategorized ? uncategorized : parseInt(this.value, 10);
           })
           .get();
       },
@@ -702,11 +777,12 @@
         if (!this.live || !this.model) {
           return;
         }
-        var listArg = settings.filterArg;
+        var listArg = this.listArg;
+        var slug = this.taxSlug;
         if (!encoded) {
           if (typeof this.model.unset === 'function') {
-            this.model.unset(taxonomy);
-            if (listArg && listArg !== taxonomy) {
+            this.model.unset(slug);
+            if (listArg && listArg !== slug) {
               this.model.unset(listArg, { silent: true });
             }
           }
@@ -716,7 +792,7 @@
           return;
         }
         var props = {};
-        props[taxonomy] = encoded;
+        props[slug] = encoded;
         var currentType = this.model.get('type');
         if (currentType) {
           props.type = currentType;
@@ -755,12 +831,12 @@
       onTermChange: function (e) {
         var $input = $(e.currentTarget);
         var value = $input.val();
-        if ($input.prop('checked') && value === settings.uncategorized) {
+        if ($input.prop('checked') && value === uncategorized) {
           this.$('.media-categories-filter-term')
             .not($input)
             .prop('checked', false);
         } else if ($input.prop('checked')) {
-          this.$('.media-categories-filter-term[value="' + settings.uncategorized + '"]').prop(
+          this.$('.media-categories-filter-term[value="' + uncategorized + '"]').prop(
             'checked',
             false
           );
@@ -820,7 +896,7 @@
     AssignCategoriesButton = Button.extend({
       className: 'button media-button assign-categories-button hidden',
       defaults: {
-        text: labels.bulkEdit || 'Edit categories',
+        text: labels.bulkEdit || 'Edit media taxonomies',
         style: 'secondary',
         size: 'large',
         disabled: true,
@@ -888,32 +964,39 @@
     if (!ensureMediaViews() || !browser || !browser.toolbar || !browser.collection) {
       return;
     }
-    if (browser.toolbar.get('MediaCategoryFilter')) {
+    if (!taxonomies.length) {
+      return;
+    }
+    if (browser.toolbar.get('MediaTaxonomyFilter-' + taxonomies[0].slug)) {
       return;
     }
 
-    var filterView = new MediaCategoryFilter({
-      controller: browser.controller,
-      model: browser.collection.props,
-      live: true,
-      priority: -74,
-    }).render();
+    taxonomies.forEach(function (tax, index) {
+      var priority = -74 + index;
+      var filterView = new MediaCategoryFilter({
+        tax: tax,
+        controller: browser.controller,
+        model: browser.collection.props,
+        live: true,
+        priority: priority,
+      }).render();
 
-    if (wp.media.view.Label) {
-      browser.toolbar.set(
-        'MediaCategoryFilterLabel',
-        new wp.media.view.Label({
-          value: labels.filterBy || 'Filter by Media Category',
-          attributes: {
-            'for': filterView.toggleId,
-          },
-          priority: -74,
-        }).render()
-      );
-    }
+      if (wp.media.view.Label) {
+        browser.toolbar.set(
+          'MediaTaxonomyFilterLabel-' + tax.slug,
+          new wp.media.view.Label({
+            value: taxLabels(tax).filterBy || 'Filter by ' + (taxLabels(tax).singular || tax.slug),
+            attributes: {
+              'for': filterView.toggleId,
+            },
+            priority: priority,
+          }).render()
+        );
+      }
 
-    browser.toolbar.set('MediaCategoryFilter', filterView);
-    categoryFilterViews.push(filterView);
+      browser.toolbar.set('MediaTaxonomyFilter-' + tax.slug, filterView);
+      categoryFilterViews.push(filterView);
+    });
 
     if (
       settings.assignCap &&
@@ -962,11 +1045,11 @@
     return $('<div>').text(text == null ? '' : String(text)).html();
   }
 
-  function termDepthFromSettings(term) {
+  function termDepthFromSettings(term, tax) {
     var depth = 0;
     var parent = parseInt(term.parent, 10) || 0;
     var byId = {};
-    (settings.terms || []).forEach(function (item) {
+    ((tax && tax.terms) || []).forEach(function (item) {
       byId[parseInt(item.id, 10)] = item;
     });
     var guard = 0;
@@ -977,10 +1060,14 @@
     return depth;
   }
 
-  function registerCreatedTerm(term) {
-    settings.terms = settings.terms || [];
+  function registerCreatedTerm(term, taxSlug) {
+    var tax = taxBySlug(taxSlug);
+    if (!tax) {
+      return null;
+    }
+    tax.terms = tax.terms || [];
     var id = parseInt(term.id, 10);
-    var existing = settings.terms.filter(function (item) {
+    var existing = tax.terms.filter(function (item) {
       return parseInt(item.id, 10) === id;
     })[0];
     if (existing) {
@@ -993,21 +1080,22 @@
       parent: parseInt(term.parent, 10) || 0,
       count: parseInt(term.count, 10) || 0,
     };
-    row.depth = termDepthFromSettings(row);
-    settings.terms.push(row);
+    row.depth = termDepthFromSettings(row, tax);
+    tax.terms.push(row);
     return row;
   }
 
-  function appendTermToChecklist($checklist, term, checked) {
+  function appendTermToChecklist($checklist, term, checked, taxSlug) {
     if (!$checklist || !$checklist.length) {
       return;
     }
     if ($checklist.find('input[type="checkbox"][value="' + term.id + '"]').length) {
       return;
     }
+    var slug = taxSlug || $checklist.closest('.media-categories-attachment-field').attr('data-taxonomy') || '';
     var $li = $(
       '<li id="' +
-        taxonomy +
+        slug +
         '-' +
         term.id +
         '">' +
@@ -1015,7 +1103,7 @@
         '<input value="' +
         term.id +
         '" type="checkbox" name="tax_input[' +
-        taxonomy +
+        slug +
         '][]" data-slug="' +
         escapeHtml(term.slug || '') +
         '"' +
@@ -1044,14 +1132,14 @@
     }
   }
 
-  function appendTermToParentSelect($select, term) {
+  function appendTermToParentSelect($select, term, tax) {
     if (!$select || !$select.length) {
       return;
     }
     if ($select.find('option[value="' + term.id + '"]').length) {
       return;
     }
-    var depth = term.depth != null ? term.depth : termDepthFromSettings(term);
+    var depth = term.depth != null ? term.depth : termDepthFromSettings(term, tax);
     var pad = new Array(depth * 3 + 1).join('\u00a0');
     var $option = $('<option></option>').val(String(term.id)).text(pad + term.name);
     var parentId = parseInt(term.parent, 10) || 0;
@@ -1069,16 +1157,20 @@
     if (!$field || !$field.length) {
       return;
     }
+    var tax = taxBySlug($field.attr('data-taxonomy'));
+    if (!tax) {
+      return;
+    }
     var $checklist = $field.find('.media-categories-checklist');
     var $parent = $field.find('.media-categories-new-parent');
-    (settings.terms || []).forEach(function (term) {
-      appendTermToChecklist($checklist, term, false);
-      appendTermToParentSelect($parent, term);
+    (tax.terms || []).forEach(function (term) {
+      appendTermToChecklist($checklist, term, false, tax.slug);
+      appendTermToParentSelect($parent, term, tax);
     });
   }
 
-  function addTermToFilterPanels(term) {
-    $('.media-categories-filter-terms').each(function () {
+  function addTermToFilterPanels(term, taxSlug) {
+    $('.media-categories-filter-terms[data-taxonomy="' + taxSlug + '"]').each(function () {
       var $box = $(this);
       if ($box.find('.media-categories-filter-term[value="' + term.id + '"]').length) {
         return;
@@ -1095,18 +1187,20 @@
     });
   }
 
-  function addTermToBulkPanel(term) {
+  function addTermToBulkPanel(term, taxSlug) {
     if (!$bulkPanel) {
       return;
     }
     var $box = $bulkPanel.find('.media-categories-bulk-terms');
-    if ($box.find('input[value="' + term.id + '"]').length) {
+    if ($box.find('input[value="' + term.id + '"][data-taxonomy="' + taxSlug + '"]').length) {
       return;
     }
     $box.append(
       '<label class="media-categories-bulk-term">' +
         '<input type="checkbox" value="' +
         term.id +
+        '" data-taxonomy="' +
+        taxSlug +
         '" /> ' +
         escapeHtml(termPrefix(term.depth) + term.name) +
         '</label>'
@@ -1114,19 +1208,30 @@
   }
 
   function rememberCreatedTerm(term, $currentField) {
-    var row = registerCreatedTerm(term);
+    var taxSlug = $currentField && $currentField.length ? $currentField.attr('data-taxonomy') : '';
+    var row = registerCreatedTerm(term, taxSlug);
+    if (!row) {
+      return null;
+    }
     if ($currentField && $currentField.length) {
-      appendTermToChecklist($currentField.find('.media-categories-checklist'), row, true);
-      appendTermToParentSelect($currentField.find('.media-categories-new-parent'), row);
+      appendTermToChecklist($currentField.find('.media-categories-checklist'), row, true, taxSlug);
+      appendTermToParentSelect(
+        $currentField.find('.media-categories-new-parent'),
+        row,
+        taxBySlug(taxSlug)
+      );
     }
     $('.media-categories-attachment-field').each(function () {
       if ($currentField && this === $currentField.get(0)) {
         return;
       }
+      if ($(this).attr('data-taxonomy') !== taxSlug) {
+        return;
+      }
       syncSidebarField($(this));
     });
-    addTermToFilterPanels(row);
-    addTermToBulkPanel(row);
+    addTermToFilterPanels(row, taxSlug);
+    addTermToBulkPanel(row, taxSlug);
     return row;
   }
 
@@ -1169,6 +1274,7 @@
       credentials: 'same-origin',
       body: JSON.stringify({
         attachment_ids: [attachmentId],
+        taxonomy: $field.attr('data-taxonomy') || '',
         term_ids: collectCheckedTermIds($field),
         append: false,
         replace: true,
@@ -1184,14 +1290,14 @@
           window.alert(
             (result.data && result.data.message) ||
               labels.bulkError ||
-              'Could not update categories.'
+              'Could not update taxonomies.'
           );
           return;
         }
         refreshAttachmentModel(attachmentId);
       })
       .catch(function () {
-        window.alert(labels.bulkError || 'Could not update categories.');
+        window.alert(labels.bulkError || 'Could not update taxonomies.');
       })
       .finally(function () {
         if (onDone) {
@@ -1324,12 +1430,19 @@
         data.parent = parent;
       }
 
+      var taxSlug = $field.attr('data-taxonomy') || '';
+      var tax = taxBySlug(taxSlug);
+      var restBase = (tax && tax.restBase) || taxSlug;
+      if (!restBase) {
+        return;
+      }
+
       var $button = $(this);
       $button.prop('disabled', true);
 
       wp
         .apiFetch({
-          path: '/wp/v2/' + settings.restBase,
+          path: '/wp/v2/' + restBase,
           method: 'POST',
           data: data,
         })
@@ -1342,7 +1455,7 @@
           saveAttachmentCategories(attachmentId, $field);
         })
         .catch(function () {
-          window.alert(labels.bulkError || 'Could not create category.');
+          window.alert(labels.bulkError || 'Could not create term.');
         })
         .finally(function () {
           $button.prop('disabled', false);
@@ -1351,10 +1464,10 @@
   }
 
   function initListBulkFromQuery() {
-    var ids = window.mediaCategoriesBulkIds || null;
+    var ids = window.mediaTaxonomiesBulkIds || null;
     if (!ids || !ids.length) {
       var params = new URLSearchParams(window.location.search);
-      if (params.get('media_categories_bulk') === '1') {
+      if (params.get('media_taxonomies_bulk') === '1') {
         ids = (params.get('media_ids') || '')
           .split(',')
           .map(function (id) {
@@ -1370,55 +1483,62 @@
   }
 
   function enhanceListFilter() {
-    var $select = $('#media-categories-filter');
-    if (!$select.length || $select.data('mediaCategoriesEnhanced')) {
-      return;
-    }
-    if (!window.Backbone || !Backbone.Model || !ensureMediaViews() || !MediaCategoryFilter) {
-      return;
-    }
-    $select.data('mediaCategoriesEnhanced', true);
+    $('.media-taxonomies-filter-select').each(function () {
+      var $select = $(this);
+      if ($select.data('mediaCategoriesEnhanced')) {
+        return;
+      }
+      if (!window.Backbone || !Backbone.Model || !ensureMediaViews() || !MediaCategoryFilter) {
+        return;
+      }
+      var tax = taxBySlug($select.attr('data-taxonomy'));
+      if (!tax) {
+        return;
+      }
+      $select.data('mediaCategoriesEnhanced', true);
 
-    var encoded = $select.attr('data-encoded') || $select.val() || '';
-    var parsed = parseFilterValue(encoded);
-    if (
-      $('#media-categories-filter-not').is(':checked') &&
-      parsed.mode === 'in' &&
-      parsed.selected.length
-    ) {
-      parsed.mode = 'not';
-    }
-    encoded = encodeFilterValue(parsed.mode, parsed.selected);
+      var encoded = $select.attr('data-encoded') || $select.val() || '';
+      var parsed = parseFilterValue(encoded);
+      var $not = $('#media-taxonomies-filter-not-' + tax.slug);
+      if ($not.is(':checked') && parsed.mode === 'in' && parsed.selected.length) {
+        parsed.mode = 'not';
+      }
+      encoded = encodeFilterValue(parsed.mode, parsed.selected);
 
-    var $hidden = $('<input type="hidden" />')
-      .attr({
-        name: $select.attr('name'),
-        id: 'media-categories-filter-value',
-      })
-      .val(encoded);
-    $select.removeAttr('name');
+      var $hidden = $('<input type="hidden" />')
+        .attr({
+          name: $select.attr('name'),
+          id: 'media-taxonomies-filter-value-' + tax.slug,
+        })
+        .val(encoded);
+      $select.removeAttr('name');
 
-    var model = new Backbone.Model();
-    model.set(taxonomy, encoded);
+      var model = new Backbone.Model();
+      model.set(tax.slug, encoded);
 
-    var view = new MediaCategoryFilter({
-      model: model,
-      live: false,
-      $input: $hidden,
-      encoded: encoded,
-      toggleId: 'media-categories-filter-toggle',
-    });
-    view.render();
+      var view = new MediaCategoryFilter({
+        tax: tax,
+        model: model,
+        live: false,
+        $input: $hidden,
+        encoded: encoded,
+        toggleId: 'media-taxonomies-filter-toggle-' + tax.slug,
+      });
+      view.render();
 
-    $select.hide().after($hidden).after(view.$el);
-    categoryFilterViews.push(view);
-    bindClearFilters();
-    $('.media-categories-filter-not-wrap').hide();
-    $('label[for="media-categories-filter"]').attr('for', 'media-categories-filter-toggle');
+      $select.hide().after($hidden).after(view.$el);
+      categoryFilterViews.push(view);
+      bindClearFilters();
+      $select.nextAll('.media-categories-filter-not-wrap').first().hide();
+      $('label[for="media-taxonomies-filter-' + tax.slug + '"]').attr(
+        'for',
+        'media-taxonomies-filter-toggle-' + tax.slug
+      );
 
-    $select.closest('form').on('submit.mediaCategoriesFilter', function () {
-      $hidden.val(encodeFilterValue(view.filterMode, view.selected));
-      $('#media-categories-filter-not').prop('checked', false);
+      $select.closest('form').on('submit.mediaCategoriesFilter-' + tax.slug, function () {
+        $hidden.val(encodeFilterValue(view.filterMode, view.selected));
+        $not.prop('checked', false);
+      });
     });
   }
 

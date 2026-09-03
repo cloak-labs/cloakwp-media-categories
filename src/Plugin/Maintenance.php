@@ -2,17 +2,19 @@
 
 declare(strict_types=1);
 
-namespace CloakWP\MediaCategories\Plugin;
+namespace CloakWP\MediaTaxonomies\Plugin;
 
-use CloakWP\MediaCategories\Core\Config;
-use CloakWP\MediaCategories\Core\Support\LegacyImport;
-use CloakWP\MediaCategories\Core\Taxonomy\Registrar;
+use CloakWP\MediaTaxonomies\Core\Config;
+use CloakWP\MediaTaxonomies\Core\Support\LegacyImport;
+use CloakWP\MediaTaxonomies\Core\Taxonomy\Registrar;
+use CloakWP\MediaTaxonomies\Core\TaxonomyConfig;
 use WP_Term;
 
 /**
  * One-time per-site work after switching from MCM (or first boot):
- * copy assignments from MCM's configured taxonomy, then recount terms so
- * unattached media is included in filter counts.
+ * copy assignments from MCM's configured taxonomy onto the default
+ * Media Categories taxonomy, then recount terms so unattached media
+ * is included in filter counts.
  */
 final class Maintenance
 {
@@ -35,26 +37,45 @@ final class Maintenance
       return;
     }
 
-    (new Registrar($this->config))->forceGenericCountCallback();
-    $this->importFromLegacyTaxonomies();
+    $registrar = new Registrar($this->config);
+    foreach ($this->config->taxonomies as $taxonomy) {
+      $registrar->forceGenericCountCallback($taxonomy->slug);
+    }
+
+    $default = $this->legacyDestination();
+    if ($default !== null) {
+      $this->importFromLegacyTaxonomies($default);
+    }
+
     $this->recount();
 
     update_option(self::OPTION_KEY, self::SCHEMA_VERSION, false);
   }
 
-  private function importFromLegacyTaxonomies(): void
+  private function legacyDestination(): ?TaxonomyConfig
+  {
+    foreach ($this->config->taxonomies as $taxonomy) {
+      if ($taxonomy->slug === 'category_media') {
+        return $taxonomy;
+      }
+    }
+
+    return null;
+  }
+
+  private function importFromLegacyTaxonomies(TaxonomyConfig $destination): void
   {
     $mcmOptions = get_option(LegacyImport::MCM_OPTION_KEY);
-    $sources = LegacyImport::sourceTaxonomies($mcmOptions, $this->config->slug);
+    $sources = LegacyImport::sourceTaxonomies($mcmOptions, $destination->slug);
 
-    foreach (LegacyImport::fallbackTaxonomies($this->config->slug) as $fallback) {
+    foreach (LegacyImport::fallbackTaxonomies($destination->slug) as $fallback) {
       if ($this->taxonomyHasAttachmentAssignments($fallback)) {
         $sources[] = $fallback;
       }
     }
 
     foreach (array_unique($sources) as $source) {
-      $this->copyAttachmentAssignments($source);
+      $this->copyAttachmentAssignments($source, $destination);
     }
   }
 
@@ -73,15 +94,11 @@ final class Maintenance
     return $count > 0;
   }
 
-  /**
-   * Append-only copy of attachment term relationships onto our taxonomy.
-   * Never replaces existing assignments.
-   */
-  private function copyAttachmentAssignments(string $sourceTaxonomy): void
+  private function copyAttachmentAssignments(string $sourceTaxonomy, TaxonomyConfig $destination): void
   {
     global $wpdb;
 
-    if ($sourceTaxonomy === '' || $sourceTaxonomy === $this->config->slug) {
+    if ($sourceTaxonomy === '' || $sourceTaxonomy === $destination->slug) {
       return;
     }
 
@@ -98,7 +115,7 @@ final class Maintenance
       return;
     }
 
-    $destTerms = $this->destinationTerms();
+    $destTerms = $this->destinationTerms($destination->slug);
     $parentMap = [];
 
     foreach ($sourceTerms as $sourceTerm) {
@@ -119,7 +136,7 @@ final class Maintenance
         $parentDestId = $parentMap[$sourceParent];
       }
 
-      $destTerm = $this->ensureDestinationTerm($sourceTerm, $destTerms, $parentDestId);
+      $destTerm = $this->ensureDestinationTerm($sourceTerm, $destTerms, $parentDestId, $destination->slug);
       if ($destTerm === null) {
         continue;
       }
@@ -128,7 +145,7 @@ final class Maintenance
       $destTerms[] = $destTerm;
 
       foreach ($objectIds as $objectId) {
-        wp_set_object_terms((int) $objectId, [(int) $destTerm->term_id], $this->config->slug, true);
+        wp_set_object_terms((int) $objectId, [(int) $destTerm->term_id], $destination->slug, true);
       }
     }
   }
@@ -136,10 +153,10 @@ final class Maintenance
   /**
    * @return list<object>
    */
-  private function destinationTerms(): array
+  private function destinationTerms(string $slug): array
   {
     $terms = get_terms([
-      'taxonomy' => $this->config->slug,
+      'taxonomy' => $slug,
       'hide_empty' => false,
     ]);
 
@@ -149,14 +166,14 @@ final class Maintenance
   /**
    * @param list<object> $destinationTerms
    */
-  private function ensureDestinationTerm(object $sourceTerm, array $destinationTerms, int $parentId): ?WP_Term
+  private function ensureDestinationTerm(object $sourceTerm, array $destinationTerms, int $parentId, string $slug): ?WP_Term
   {
     $matched = LegacyImport::matchTerm($sourceTerm, $destinationTerms);
     if ($matched instanceof WP_Term) {
       return $matched;
     }
     if (is_object($matched) && isset($matched->term_id)) {
-      $existing = get_term((int) $matched->term_id, $this->config->slug);
+      $existing = get_term((int) $matched->term_id, $slug);
       return $existing instanceof WP_Term ? $existing : null;
     }
 
@@ -168,29 +185,31 @@ final class Maintenance
       $args['slug'] = (string) $sourceTerm->slug;
     }
 
-    $created = wp_insert_term((string) $sourceTerm->name, $this->config->slug, $args);
+    $created = wp_insert_term((string) $sourceTerm->name, $slug, $args);
     if (is_wp_error($created)) {
-      $existing = get_term_by('slug', (string) $sourceTerm->slug, $this->config->slug);
+      $existing = get_term_by('slug', (string) $sourceTerm->slug, $slug);
       return $existing instanceof WP_Term ? $existing : null;
     }
 
-    $term = get_term((int) $created['term_id'], $this->config->slug);
+    $term = get_term((int) $created['term_id'], $slug);
 
     return $term instanceof WP_Term ? $term : null;
   }
 
   private function recount(): void
   {
-    $ttIds = get_terms([
-      'taxonomy' => $this->config->slug,
-      'hide_empty' => false,
-      'fields' => 'tt_ids',
-    ]);
+    foreach ($this->config->taxonomies as $taxonomy) {
+      $ttIds = get_terms([
+        'taxonomy' => $taxonomy->slug,
+        'hide_empty' => false,
+        'fields' => 'tt_ids',
+      ]);
 
-    if (is_wp_error($ttIds) || $ttIds === []) {
-      return;
+      if (is_wp_error($ttIds) || $ttIds === []) {
+        continue;
+      }
+
+      wp_update_term_count_now(array_map('intval', $ttIds), $taxonomy->slug);
     }
-
-    wp_update_term_count_now(array_map('intval', $ttIds), $this->config->slug);
   }
 }

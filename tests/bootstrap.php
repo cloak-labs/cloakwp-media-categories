@@ -7,7 +7,7 @@ if (is_readable($autoload)) {
   require $autoload;
 } else {
   spl_autoload_register(static function (string $class): void {
-    $prefix = 'CloakWP\\MediaCategories\\';
+    $prefix = 'CloakWP\\MediaTaxonomies\\';
     if (!str_starts_with($class, $prefix)) {
       return;
     }
@@ -61,7 +61,7 @@ if (!function_exists('sanitize_key')) {
 if (!function_exists('add_action')) {
   function add_action($hook, $callback, $priority = 10, $accepted_args = 1): void
   {
-    \CloakWP\MediaCategories\Tests\WpStubs::$actions[] = [
+    \CloakWP\MediaTaxonomies\Tests\WpStubs::$actions[] = [
       'hook' => $hook,
       'callback' => $callback,
       'priority' => $priority,
@@ -92,7 +92,7 @@ if (!function_exists('__')) {
 if (!function_exists('get_post_type')) {
   function get_post_type($id)
   {
-    return \CloakWP\MediaCategories\Tests\WpStubs::$postTypes[(int) $id] ?? false;
+    return \CloakWP\MediaTaxonomies\Tests\WpStubs::$postTypes[(int) $id] ?? false;
   }
 }
 
@@ -100,14 +100,14 @@ if (!function_exists('current_user_can')) {
   function current_user_can($cap, $id = null): bool
   {
     $key = $id !== null ? $cap . ':' . $id : $cap;
-    return \CloakWP\MediaCategories\Tests\WpStubs::$caps[$key] ?? false;
+    return \CloakWP\MediaTaxonomies\Tests\WpStubs::$caps[$key] ?? false;
   }
 }
 
 if (!function_exists('wp_set_object_terms')) {
   function wp_set_object_terms($object_id, $terms, $taxonomy, $append = false): array
   {
-    \CloakWP\MediaCategories\Tests\WpStubs::$setCalls[] = [
+    \CloakWP\MediaTaxonomies\Tests\WpStubs::$setCalls[] = [
       'id' => (int) $object_id,
       'terms' => array_values((array) $terms),
       'taxonomy' => (string) $taxonomy,
@@ -120,21 +120,21 @@ if (!function_exists('wp_set_object_terms')) {
 if (!function_exists('get_taxonomy')) {
   function get_taxonomy($slug)
   {
-    return \CloakWP\MediaCategories\Tests\WpStubs::$taxonomies[(string) $slug] ?? false;
+    return \CloakWP\MediaTaxonomies\Tests\WpStubs::$taxonomies[(string) $slug] ?? false;
   }
 }
 
 if (!function_exists('get_terms')) {
   function get_terms($args = [])
   {
-    return \CloakWP\MediaCategories\Tests\WpStubs::$terms;
+    return \CloakWP\MediaTaxonomies\Tests\WpStubs::$terms;
   }
 }
 
 if (!function_exists('wp_get_object_terms')) {
   function wp_get_object_terms($object_id, $taxonomy, $args = [])
   {
-    $terms = \CloakWP\MediaCategories\Tests\WpStubs::$objectTerms[(int) $object_id] ?? [];
+    $terms = \CloakWP\MediaTaxonomies\Tests\WpStubs::$objectTerms[(int) $object_id] ?? [];
     if (($args['fields'] ?? '') === 'ids') {
       return array_map(static fn($term) => (int) $term->term_id, $terms);
     }
@@ -145,7 +145,7 @@ if (!function_exists('wp_get_object_terms')) {
 if (!function_exists('wp_terms_checklist')) {
   function wp_terms_checklist($object_id, $args = []): void
   {
-    echo \CloakWP\MediaCategories\Tests\WpStubs::$checklistHtml;
+    echo \CloakWP\MediaTaxonomies\Tests\WpStubs::$checklistHtml;
   }
 }
 
@@ -185,7 +185,7 @@ if (!class_exists('WP_Post')) {
 if (!function_exists('wp_remove_object_terms')) {
   function wp_remove_object_terms($object_id, $terms, $taxonomy): bool
   {
-    \CloakWP\MediaCategories\Tests\WpStubs::$removeCalls[] = [
+    \CloakWP\MediaTaxonomies\Tests\WpStubs::$removeCalls[] = [
       'id' => (int) $object_id,
       'terms' => array_map('intval', (array) $terms),
       'taxonomy' => (string) $taxonomy,
