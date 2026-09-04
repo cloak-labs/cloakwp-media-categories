@@ -13,9 +13,24 @@
   background: #fff;
 }
 
-/* Core `.compat-item tr { overflow: hidden }` would clip indented children. */
+/*
+ * Core `.compat-item tr { display: block; overflow: hidden }` contains
+ * floated `.label` / `.field` via overflow, which also clips indented terms.
+ * Flex keeps each label top-aligned to its checklist without that clipping.
+ */
 .compat-item tr:has(.media-categories-checklist-wrap) {
+  display: flex;
+  align-items: flex-start;
   overflow: visible;
+}
+
+.compat-item tr:has(.media-categories-checklist-wrap) > .label,
+.compat-item tr:has(.media-categories-checklist-wrap) > .field {
+  float: none;
+}
+
+.compat-item tr:has(.media-categories-checklist-wrap) > .field {
+  min-width: 0;
 }
 
 .media-categories-attachment-field .media-categories-checklist,
